@@ -8,7 +8,6 @@ import Home from "@/components/Home";
 import HowToPlayModal from "@/components/HowToPlayModal";
 import Lobby from "@/components/Lobby";
 import EyushSecret from "@/components/secret/EyushSecret";
-import CreditsCredit from "@/components/CreditsCredit";
 import { useGameSocket } from "@/hooks/useGameSocket";
 
 interface GameAppProps {
@@ -194,11 +193,6 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
                 )
               )}
             </AnimatePresence>
-            {screen === "lobby" && (
-              <div className="mt-4 text-center">
-                <CreditsCredit />
-              </div>
-            )}
           </div>
         </div>
       )}
