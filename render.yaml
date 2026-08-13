@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: head-guess-game-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CLIENT_ORIGIN
+        fromService:
+          name: head-guess-game-client
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: GEMINI_API_KEY
+        sync: false
+
+  - type: web
+    name: head-guess-game-client
+    runtime: node
+    plan: free
+    rootDir: client
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_SOCKET_URL
+        fromService:
+          name: head-guess-game-server
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

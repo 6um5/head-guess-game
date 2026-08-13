@@ -189,6 +189,44 @@ export function resetRound(room) {
 
 /**
  * @param {Room} room
+ */
+export function resetRoomToWaiting(room) {
+  clearRoundResetTimer(room);
+  clearRoundClock(room);
+  resetHints(room);
+  room.status = 'waiting';
+  room.roundPhase = null;
+  room.roundNumber = 0;
+  room.fighterA = null;
+  room.fighterB = null;
+  room.category = null;
+  room.isCustomRound = false;
+  room.customMode = null;
+  room.messages = [];
+  room.roundWinner = null;
+  room.matchWinner = null;
+  room.revealedWordA = null;
+  room.revealedWordB = null;
+}
+
+/**
+ * @param {string} code
+ */
+export function removeRoom(code) {
+  const room = rooms.get(code);
+
+  if (!room) {
+    return;
+  }
+
+  clearRoundResetTimer(room);
+  clearHintTimer(room);
+  clearRoundClock(room);
+  rooms.delete(code);
+}
+
+/**
+ * @param {Room} room
  * @param {number} pointsToWin
  */
 export function setPointsToWin(room, pointsToWin) {

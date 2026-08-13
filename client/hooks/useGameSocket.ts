@@ -63,6 +63,7 @@ function resolveScreen(
 
 export function useGameSocket() {
   const userIdRef = useRef<string | null>(null);
+  const roomCodeRef = useRef<string | null>(null);
   const gameStatusRef = useRef<GameStatus>("waiting");
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,6 +102,7 @@ export function useGameSocket() {
 
   const resetToHome = useCallback((message?: string) => {
     gameStatusRef.current = "waiting";
+    roomCodeRef.current = null;
     setRoomCode(null);
     setPlayers([]);
     setScreen("home");
@@ -173,6 +175,7 @@ export function useGameSocket() {
     };
 
     const handleRoomUpdated = (payload: RoomUpdatedPayload) => {
+      roomCodeRef.current = payload.roomCode;
       setRoomCode(payload.roomCode);
       syncPlayerMeta(payload.players);
       setError(null);
@@ -180,10 +183,7 @@ export function useGameSocket() {
     };
 
     const handleGameState = (payload: GameStatePayload) => {
-      setRoomCode((currentRoomCode) => {
-        applyGameState(payload, currentRoomCode);
-        return currentRoomCode;
-      });
+      applyGameState(payload, roomCodeRef.current);
     };
 
     const handleRoomError = (payload: RoomErrorPayload) => {

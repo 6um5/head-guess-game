@@ -1,8 +1,10 @@
 import { io, Socket } from "socket.io-client";
 import { getStoredSessionId, setStoredSessionId } from "@/lib/sessionStorage";
 
-const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL ?? "https://head-guess-game-1.onrender.com";
+const SOCKET_URL = (
+  process.env.NEXT_PUBLIC_SOCKET_URL ??
+  "https://head-guess-game-server.onrender.com"
+).replace(/\/$/, "");
 
 export interface SessionPayload {
   sessionId: string;
@@ -16,6 +18,11 @@ function createSocketInstance(): Socket {
 
   const instance = io(SOCKET_URL, {
     autoConnect: false,
+    transports: ["websocket", "polling"],
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    timeout: 20000,
     auth: storedSessionId ? { sessionId: storedSessionId } : {},
   });
 

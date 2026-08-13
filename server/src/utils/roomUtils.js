@@ -10,24 +10,38 @@
  */
 export async function getRoomPlayers(io, roomCode) {
   const sockets = await io.in(roomCode).fetchSockets();
+  const seenUserIds = new Set();
+  /** @type {RoomPlayer[]} */
+  const players = [];
 
-  return sockets
-    .map((remoteSocket) => {
-      /** @type {Session | undefined} */
-      const session = remoteSocket.data.session;
+  for (const remoteSocket of sockets) {
+    /** @type {Session | undefined} */
+    const session = remoteSocket.data.session;
 
-      if (!session?.username) {
-        return null;
-      }
+    if (!session?.username || seenUserIds.has(session.userId)) {
+      continue;
+    }
 
-      return {
-        userId: session.userId,
-        username: session.username,
-        points: session.points,
-        isHost: session.isHost,
-      };
-    })
-    .filter((player) => player !== null);
+    seenUserIds.add(session.userId);
+    players.push({
+      userId: session.userId,
+      username: session.username,
+      points: session.points,
+      isHost: session.isHost,
+    });
+  }
+
+  return players;
+}
+
+/**
+ * @param {import('socket.io').Server} io
+ * @param {string} roomCode
+ * @returns {Promise<boolean>}
+ */
+export async function hasConnectedHost(io, roomCode) {
+  const sockets = await io.in(roomCode).fetchSockets();
+  return sockets.some((remoteSocket) => remoteSocket.data.session?.isHost === true);
 }
 
 /**

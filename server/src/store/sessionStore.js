@@ -39,6 +39,21 @@ export function saveSession(session) {
 }
 
 /**
+ * Ensures only one session in a room is marked as host.
+ * @param {string} roomCode
+ * @param {string | null} [hostUserId=null]
+ */
+export function setRoomHost(roomCode, hostUserId = null) {
+  for (const session of sessions.values()) {
+    if (session.roomCode !== roomCode) {
+      continue;
+    }
+
+    session.isHost = Boolean(hostUserId) && session.userId === hostUserId;
+  }
+}
+
+/**
  * @returns {number}
  */
 export function getSessionCount() {

@@ -196,8 +196,8 @@ export default function GameArena({
           />
 
           {roundPhase === "guessing" && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="max-h-[36%] min-h-0 shrink overflow-y-auto sm:max-h-[42%]">
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto pb-24">
                 <DuelBoard
                   fighterA={fighterA}
                   fighterB={fighterB}
@@ -220,10 +220,7 @@ export default function GameArena({
                   onReject={onRejectHints}
                   onRequestHint={onRequestPersonalHint}
                 />
-              </div>
-
-              {isHost && (
-                <div className="hidden max-h-[22%] shrink-0 overflow-y-auto border-b border-white/10 lg:block">
+                {isHost && (
                   <HostControls
                     players={players}
                     currentUserId={currentUserId}
@@ -238,24 +235,22 @@ export default function GameArena({
                     onKickPlayer={onKickPlayer}
                     onSetRoundTimer={onSetRoundTimer}
                   />
-                </div>
-              )}
-              <div className="min-h-0 flex-1">
-                <GuessChat
-                  messages={messages}
-                  currentUserId={currentUserId}
-                  onSendGuess={onSendGuess}
-                  disabled={gameStatus !== "playing" || !canGuess}
-                />
+                )}
+                {!canGuess && gameStatus === "playing" && (
+                  <p
+                    className="px-3 py-3 text-center text-xs text-slate-400"
+                    dir="rtl"
+                  >
+                    أنت جمهور — افتح الشات لمشاهدة الحزر
+                  </p>
+                )}
               </div>
-              {!canGuess && gameStatus === "playing" && (
-                <p
-                  className="border-t border-white/10 px-3 py-2 text-center text-xs text-slate-400"
-                  dir="rtl"
-                >
-                  أنت جمهور — شاهد الحزر فقط
-                </p>
-              )}
+              <GuessChat
+                messages={messages}
+                currentUserId={currentUserId}
+                onSendGuess={onSendGuess}
+                disabled={gameStatus !== "playing" || !canGuess}
+              />
             </div>
           )}
 

@@ -85,8 +85,19 @@ function findPlayer(players, userId) {
  * @param {import('../types/player.js').RoomPlayer[]} players
  */
 function pickRandomPair(players) {
-  if (players.length < 2) return null;
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
+  const unique = [];
+  const seen = new Set();
+
+  for (const player of players) {
+    if (!player?.userId || seen.has(player.userId)) {
+      continue;
+    }
+    seen.add(player.userId);
+    unique.push(player);
+  }
+
+  if (unique.length < 2) return null;
+  const shuffled = [...unique].sort(() => Math.random() - 0.5);
   return [shuffled[0], shuffled[1]];
 }
 
@@ -241,6 +252,11 @@ export function registerGameHandlers(io, socket) {
         return;
       }
 
+      if (room.status !== 'waiting' && room.status !== 'match_end') {
+        emitGameError(socket, 'لا يمكن بدء مباراة جديدة الآن.');
+        return;
+      }
+
       const players = await getRoomPlayers(io, room.code);
 
       if (players.length < 2) {
@@ -249,6 +265,9 @@ export function registerGameHandlers(io, socket) {
       }
 
       clearRoundResetTimer(room);
+      clearHintTimer(room);
+      clearRoundClock(room);
+      resetHints(room);
       room.pointsToWin = sanitizePointsToWin(pointsToWin, room.pointsToWin);
       room.status = 'playing';
       room.roundPhase = 'selecting';
@@ -257,6 +276,7 @@ export function registerGameHandlers(io, socket) {
       room.fighterB = null;
       room.category = null;
       room.isCustomRound = false;
+      room.customMode = null;
       room.messages = [];
       room.roundWinner = null;
       room.matchWinner = null;
@@ -550,6 +570,15 @@ export function registerGameHandlers(io, socket) {
 
       if (!room.fighterA?.wordReady || !room.fighterB?.wordReady) {
         emitGameError(socket, 'يجب تجهيز كلمتي اللاعبين أولاً.');
+        return;
+      }
+
+      if (
+        room.fighterA.word &&
+        room.fighterB.word &&
+        isCorrectGuess(room.fighterA.word, room.fighterB.word)
+      ) {
+        emitGameError(socket, 'يجب أن تكون الكلمتان مختلفتين.');
         return;
       }
 
