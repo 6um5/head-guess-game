@@ -2,7 +2,7 @@ import { io, Socket } from "socket.io-client";
 import { getStoredSessionId, setStoredSessionId } from "@/lib/sessionStorage";
 
 const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
+  process.env.NEXT_PUBLIC_SOCKET_URL ?? "https://head-guess-game-1.onrender.com";
 
 export interface SessionPayload {
   sessionId: string;
