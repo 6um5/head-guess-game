@@ -58,6 +58,16 @@
  * @property {string | null} revealedWordA
  * @property {string | null} revealedWordB
  * @property {ReturnType<typeof setTimeout> | null} roundResetTimer
+ * @property {string | null} hostUserId
+ * @property {number} lastActivityAt
+ * @property {Record<string, RoomMember>} members
+ *
+ * @typedef {Object} RoomMember
+ * @property {string} userId
+ * @property {string} username
+ * @property {number} points
+ * @property {boolean} isHost
+ * @property {number} lastSeen
  */
 
 export {};

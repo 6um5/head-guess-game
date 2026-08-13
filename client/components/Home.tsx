@@ -5,6 +5,7 @@ import { ArrowRight, LogIn, Shield, Sparkles, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import CreditsFooter from "@/components/CreditsFooter";
 import InteractiveButton from "@/components/ui/InteractiveButton";
+import { getStoredRoomCode, getStoredUsername } from "@/lib/sessionStorage";
 
 interface HomeProps {
   onCreateRoom: (username: string) => void;
@@ -40,13 +41,23 @@ export default function Home({
   isConnected,
   initialRoomCode = null,
 }: HomeProps) {
-  const [username, setUsername] = useState("");
-  const [roomCode, setRoomCode] = useState(initialRoomCode ?? "");
-  const [showJoinInput, setShowJoinInput] = useState(Boolean(initialRoomCode));
+  const [username, setUsername] = useState(() => getStoredUsername() ?? "");
+  const [roomCode, setRoomCode] = useState(
+    () => initialRoomCode ?? getStoredRoomCode() ?? "",
+  );
+  const [showJoinInput, setShowJoinInput] = useState(() =>
+    Boolean(initialRoomCode ?? getStoredRoomCode()),
+  );
 
   useEffect(() => {
-    if (initialRoomCode) {
-      setRoomCode(initialRoomCode.toUpperCase());
+    const storedName = getStoredUsername();
+    if (storedName) {
+      setUsername(storedName);
+    }
+
+    const storedCode = initialRoomCode ?? getStoredRoomCode();
+    if (storedCode) {
+      setRoomCode(storedCode.toUpperCase());
       setShowJoinInput(true);
     }
   }, [initialRoomCode]);

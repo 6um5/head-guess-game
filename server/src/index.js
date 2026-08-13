@@ -7,6 +7,9 @@ import { registerGameHandlers } from './handlers/gameHandlers.js';
 import { handleSessionRoomRejoin, registerRoomHandlers } from './handlers/roomHandlers.js';
 import { registerSecretHandlers } from './handlers/secretHandlers.js';
 import { sessionMiddleware } from './middleware/sessionMiddleware.js';
+import { loadPersistedState } from './store/persist.js';
+
+loadPersistedState();
 
 const PORT = Number(process.env.PORT) || 3001;
 const CLIENT_ORIGINS = String(process.env.CLIENT_ORIGIN || 'http://localhost:3000')

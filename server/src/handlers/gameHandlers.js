@@ -6,10 +6,14 @@ import {
   ensureHints,
   ensureRoundClock,
   getRoom,
+  removeMemberByUserId,
   resetHints,
+  resetMemberPoints,
   resetRound,
+  setMemberPoints,
 } from '../store/roomStore.js';
-import { saveSession } from '../store/sessionStore.js';
+import { schedulePersist } from '../store/persist.js';
+import { getSessionsByRoom, saveSession } from '../store/sessionStore.js';
 import { generateHint, generateTwoDistinctWords } from '../utils/gemini.js';
 import {
   buildPersonalizedGameState,
@@ -283,12 +287,18 @@ export function registerGameHandlers(io, socket) {
       room.revealedWordA = null;
       room.revealedWordB = null;
 
+      resetMemberPoints(room);
+      for (const roomSession of getSessionsByRoom(room.code)) {
+        roomSession.points = 0;
+        saveSession(roomSession);
+      }
       for (const remote of await io.in(room.code).fetchSockets()) {
         if (remote.data.session) {
           remote.data.session.points = 0;
           saveSession(remote.data.session);
         }
       }
+      schedulePersist();
 
       await emitRoomUpdated(io, room.code);
       await emitGameState(io, room.code);
@@ -907,6 +917,8 @@ export function registerGameHandlers(io, socket) {
       if (isCorrectGuess(sanitizedGuess, targetWord)) {
         session.points += 1;
         saveSession(session);
+        setMemberPoints(room, session.userId, session.points);
+        schedulePersist();
 
         room.roundWinner = {
           userId: session.userId,
@@ -1006,10 +1018,14 @@ export function registerGameHandlers(io, socket) {
       }
 
       targetSession.roomCode = null;
+      targetSession.points = 0;
+      targetSession.isHost = false;
       saveSession(targetSession);
+      removeMemberByUserId(room, userId);
 
       targetSocket.emit('kicked', { message: 'تمت إزالتك من الغرفة بواسطة المضيف.' });
       await targetSocket.leave(room.code);
+      schedulePersist();
 
       if (
         room.fighterA?.userId === userId ||

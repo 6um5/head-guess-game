@@ -1,25 +1,40 @@
 import {
   addRoom,
+  findMemberByUsername,
+  findMemberByUserId,
   getRoom,
   hasRoom,
   normalizeRoomCode,
+  removeMemberByUserId,
   removeRoom,
-  resetRound,
-  resetRoomToWaiting,
+  upsertMember,
 } from '../store/roomStore.js';
+import { schedulePersist } from '../store/persist.js';
 import { saveSession, setRoomHost } from '../store/sessionStore.js';
 import { generateUniqueRoomCode } from '../utils/generateRoomCode.js';
 import { emitGameState } from '../utils/gameUtils.js';
 import { emitRoomUpdated, hasConnectedHost, sanitizeUsername } from '../utils/roomUtils.js';
 import { emitGameStateToSocket } from './gameHandlers.js';
 
-const HOST_TRANSFER_GRACE_MS = 10_000;
-const EMPTY_ROOM_GRACE_MS = 30_000;
+const HOST_TRANSFER_GRACE_MS = 45_000;
+const EMPTY_ROOM_GRACE_MS = 6 * 60 * 60 * 1000;
 
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
 const pendingHostTransfers = new Map();
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
 const pendingRoomCleanups = new Map();
+
+/**
+ * @param {import('socket.io').Socket} socket
+ */
+function emitSession(socket) {
+  const { session } = socket.data;
+  if (!session) return;
+  socket.emit('session', {
+    sessionId: session.sessionId,
+    userId: session.userId,
+  });
+}
 
 /**
  * @param {string} roomCode
@@ -44,12 +59,72 @@ function clearPendingRoomCleanup(roomCode) {
 }
 
 /**
+ * @param {import('../types/room.js').Room} room
+ * @param {import('../types/session.js').Session} session
+ */
+function syncMember(room, session) {
+  upsertMember(room, {
+    userId: session.userId,
+    username: session.username ?? 'لاعب',
+    points: session.points,
+    isHost: session.isHost,
+  });
+}
+
+/**
+ * @param {import('socket.io').Server} io
+ * @param {string} roomCode
+ * @returns {Promise<Set<string>>}
+ */
+async function getConnectedUserIds(io, roomCode) {
+  const sockets = await io.in(roomCode).fetchSockets();
+  return new Set(
+    sockets
+      .map((remote) => remote.data.session?.userId)
+      .filter((userId) => typeof userId === 'string'),
+  );
+}
+
+/**
+ * Restore a returning player by the same username, including points and identity.
+ * @param {import('../types/room.js').Room} room
+ * @param {import('../types/session.js').Session} session
+ * @param {string} username
+ * @param {Set<string>} connectedUserIds
+ */
+function restorePlayerIdentity(room, session, username, connectedUserIds) {
+  const byName = findMemberByUsername(room, username);
+  const byId = findMemberByUserId(room, session.userId);
+
+  if (byName && connectedUserIds.has(byName.userId) && byName.userId !== session.userId) {
+    return { ok: false, reason: 'name_taken' };
+  }
+
+  const member = byName ?? byId;
+  if (member) {
+    session.userId = member.userId;
+    session.points = member.points;
+  }
+
+  session.username = username;
+  session.roomCode = room.code;
+
+  if (!room.hostUserId) {
+    room.hostUserId = session.userId;
+  }
+  session.isHost = room.hostUserId === session.userId;
+  syncMember(room, session);
+  return { ok: true };
+}
+
+/**
  * @param {import('socket.io').Server} io
  * @param {string} roomCode
  * @param {import('socket.io').Socket} [preferredSocket]
  */
 async function promoteHostIfNeeded(io, roomCode, preferredSocket) {
-  if (!hasRoom(roomCode)) {
+  const room = getRoom(roomCode);
+  if (!room) {
     return;
   }
 
@@ -67,11 +142,14 @@ async function promoteHostIfNeeded(io, roomCode, preferredSocket) {
     return;
   }
 
+  room.hostUserId = nextHost.data.session.userId;
   setRoomHost(roomCode, nextHost.data.session.userId);
+  syncMember(room, nextHost.data.session);
   saveSession(nextHost.data.session);
   nextHost.emit('becameHost', { message: 'أصبحت المضيف الجديد للغرفة.' });
   await emitRoomUpdated(io, roomCode);
   await emitGameState(io, roomCode);
+  schedulePersist();
 }
 
 /**
@@ -105,6 +183,7 @@ function scheduleEmptyRoomCleanup(roomCode) {
       }
 
       removeRoom(roomCode);
+      schedulePersist();
     }, EMPTY_ROOM_GRACE_MS),
   );
 }
@@ -125,27 +204,26 @@ async function leaveCurrentRoom(socket, io, { transferHost = true } = {}) {
   const room = getRoom(previousRoom);
 
   await socket.leave(previousRoom);
+
+  if (room) {
+    syncMember(room, {
+      ...session,
+      isHost: wasHost,
+    });
+  }
+
   session.roomCode = null;
   session.isHost = false;
   saveSession(session);
 
-  if (room) {
-    if (
-      room.fighterA?.userId === session.userId ||
-      room.fighterB?.userId === session.userId
-    ) {
-      if (room.status === 'playing' || room.status === 'round_end') {
-        resetRound(room);
-      }
-    }
-  }
-
   const remaining = await io.in(previousRoom).fetchSockets();
 
   if (remaining.length === 0) {
-    clearPendingHostTransfer(previousRoom);
-    clearPendingRoomCleanup(previousRoom);
-    removeRoom(previousRoom);
+    if (room && wasHost) {
+      room.hostUserId = session.userId;
+    }
+    scheduleEmptyRoomCleanup(previousRoom);
+    schedulePersist();
     return;
   }
 
@@ -157,6 +235,46 @@ async function leaveCurrentRoom(socket, io, { transferHost = true } = {}) {
   if (hasRoom(previousRoom)) {
     await emitGameState(io, previousRoom);
   }
+  schedulePersist();
+}
+
+/**
+ * @param {import('socket.io').Server} io
+ * @param {import('socket.io').Socket} socket
+ * @param {string} roomCode
+ * @param {string} username
+ */
+async function enterRoom(io, socket, roomCode, username) {
+  const room = getRoom(roomCode);
+  if (!room) {
+    return false;
+  }
+
+  clearPendingRoomCleanup(roomCode);
+  clearPendingHostTransfer(roomCode);
+
+  const connectedUserIds = await getConnectedUserIds(io, roomCode);
+  const restored = restorePlayerIdentity(
+    room,
+    socket.data.session,
+    username,
+    connectedUserIds,
+  );
+
+  if (!restored.ok) {
+    socket.emit('roomError', {
+      message: 'هذا الاسم مستخدم حالياً في الغرفة. استخدم نفس حسابك أو اسماً آخر.',
+    });
+    return false;
+  }
+
+  saveSession(socket.data.session);
+  emitSession(socket);
+  await socket.join(roomCode);
+  await emitRoomUpdated(io, roomCode);
+  await emitGameStateToSocket(io, socket);
+  schedulePersist();
+  return true;
 }
 
 /**
@@ -177,16 +295,23 @@ export function registerRoomHandlers(io, socket) {
 
       const roomCode = generateUniqueRoomCode();
       addRoom(roomCode);
+      const room = getRoom(roomCode);
 
       const { session } = socket.data;
       session.username = sanitizedUsername;
       session.roomCode = roomCode;
       session.isHost = true;
       session.points = 0;
+      if (room) {
+        room.hostUserId = session.userId;
+        syncMember(room, session);
+      }
       saveSession(session);
 
       await socket.join(roomCode);
+      emitSession(socket);
       await emitRoomUpdated(io, roomCode);
+      schedulePersist();
     } catch (error) {
       console.error('createRoom failed:', error);
       socket.emit('roomError', { message: 'تعذر إنشاء الغرفة. حاول مرة أخرى.' });
@@ -213,45 +338,17 @@ export function registerRoomHandlers(io, socket) {
         return;
       }
 
-      await leaveCurrentRoom(socket, io);
+      const { session } = socket.data;
+      if (session.roomCode && session.roomCode !== normalizedCode) {
+        await leaveCurrentRoom(socket, io);
+      }
 
       if (!hasRoom(normalizedCode)) {
         socket.emit('roomError', { message: 'الغرفة غير موجودة. تحقق من الكود.' });
         return;
       }
 
-      const occupants = await io.in(normalizedCode).fetchSockets();
-      const room = getRoom(normalizedCode);
-      const sameUserAlreadyHost = occupants.some(
-        (remote) =>
-          remote.data.session?.userId === socket.data.session.userId &&
-          remote.data.session?.isHost === true,
-      );
-
-      if (room && occupants.length === 0) {
-        resetRoomToWaiting(room);
-      }
-
-      clearPendingRoomCleanup(normalizedCode);
-      clearPendingHostTransfer(normalizedCode);
-
-      const { session } = socket.data;
-      session.username = sanitizedUsername;
-      session.roomCode = normalizedCode;
-      session.points = occupants.length === 0 ? 0 : session.points;
-      const shouldBeHost =
-        occupants.length === 0 ||
-        sameUserAlreadyHost ||
-        !(await hasConnectedHost(io, normalizedCode));
-      session.isHost = shouldBeHost;
-      if (shouldBeHost) {
-        setRoomHost(normalizedCode, session.userId);
-      }
-      saveSession(session);
-
-      await socket.join(normalizedCode);
-      await emitRoomUpdated(io, normalizedCode);
-      await emitGameStateToSocket(io, socket);
+      await enterRoom(io, socket, normalizedCode, sanitizedUsername);
     } catch (error) {
       console.error('joinRoom failed:', error);
       socket.emit('roomError', { message: 'تعذر الانضمام للغرفة.' });
@@ -284,6 +381,11 @@ export function registerRoomHandlers(io, socket) {
 
     const roomCode = session.roomCode;
     const wasHost = session.isHost;
+    const room = getRoom(roomCode);
+
+    if (room) {
+      syncMember(room, session);
+    }
 
     if (hasRoom(roomCode)) {
       await emitRoomUpdated(io, roomCode);
@@ -294,12 +396,14 @@ export function registerRoomHandlers(io, socket) {
 
     if (remaining.length === 0) {
       scheduleEmptyRoomCleanup(roomCode);
+      schedulePersist();
       return;
     }
 
     if (wasHost) {
       scheduleHostTransfer(io, roomCode);
     }
+    schedulePersist();
   });
 }
 
@@ -321,17 +425,10 @@ export async function handleSessionRoomRejoin(io, socket) {
     return;
   }
 
-  clearPendingRoomCleanup(session.roomCode);
-  clearPendingHostTransfer(session.roomCode);
-
-  await socket.join(session.roomCode);
-
-  if (session.isHost) {
-    setRoomHost(session.roomCode, session.userId);
-  } else {
-    await promoteHostIfNeeded(io, session.roomCode);
+  const username = sanitizeUsername(session.username);
+  if (!username) {
+    return;
   }
 
-  await emitRoomUpdated(io, session.roomCode);
-  await emitGameStateToSocket(io, socket);
+  await enterRoom(io, socket, session.roomCode, username);
 }

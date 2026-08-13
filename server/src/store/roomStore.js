@@ -4,6 +4,10 @@
 /** @type {Map<string, Room>} */
 const rooms = new Map();
 
+export function getAllRooms() {
+  return rooms;
+}
+
 /**
  * @returns {HintState}
  */
@@ -61,6 +65,9 @@ export function createRoomRecord(code) {
     revealedWordA: null,
     revealedWordB: null,
     roundResetTimer: null,
+    hostUserId: null,
+    lastActivityAt: Date.now(),
+    members: {},
   };
 
   rooms.set(code, room);
@@ -231,4 +238,125 @@ export function removeRoom(code) {
  */
 export function setPointsToWin(room, pointsToWin) {
   room.pointsToWin = pointsToWin;
+}
+
+/**
+ * @param {string | undefined | null} username
+ * @returns {string}
+ */
+export function usernameKey(username) {
+  return String(username ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * @param {Room} room
+ * @returns {Record<string, import('../types/room.js').RoomMember>}
+ */
+export function ensureMembers(room) {
+  if (!room.members || typeof room.members !== 'object') {
+    room.members = {};
+  }
+  return room.members;
+}
+
+/**
+ * @param {Room} room
+ */
+export function touchRoom(room) {
+  room.lastActivityAt = Date.now();
+}
+
+/**
+ * @param {Room} room
+ * @param {{ userId: string, username: string, points?: number, isHost?: boolean }} player
+ */
+export function upsertMember(room, player) {
+  const members = ensureMembers(room);
+  const key = usernameKey(player.username);
+
+  if (!key || !player.userId) {
+    return null;
+  }
+
+  for (const [existingKey, member] of Object.entries(members)) {
+    if (member.userId === player.userId && existingKey !== key) {
+      delete members[existingKey];
+    }
+  }
+
+  const previous = members[key];
+  members[key] = {
+    userId: player.userId,
+    username: player.username,
+    points: Number.isFinite(player.points) ? player.points : previous?.points ?? 0,
+    isHost: Boolean(player.isHost),
+    lastSeen: Date.now(),
+  };
+
+  if (player.isHost) {
+    room.hostUserId = player.userId;
+  }
+
+  touchRoom(room);
+  return members[key];
+}
+
+/**
+ * @param {Room} room
+ * @param {string} username
+ */
+export function findMemberByUsername(room, username) {
+  return ensureMembers(room)[usernameKey(username)] ?? null;
+}
+
+/**
+ * @param {Room} room
+ * @param {string} userId
+ */
+export function findMemberByUserId(room, userId) {
+  return (
+    Object.values(ensureMembers(room)).find((member) => member.userId === userId) ??
+    null
+  );
+}
+
+/**
+ * @param {Room} room
+ * @param {string} userId
+ * @param {number} points
+ */
+export function setMemberPoints(room, userId, points) {
+  const member = findMemberByUserId(room, userId);
+  if (member) {
+    member.points = points;
+    member.lastSeen = Date.now();
+  }
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ */
+export function resetMemberPoints(room) {
+  for (const member of Object.values(ensureMembers(room))) {
+    member.points = 0;
+  }
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ * @param {string} userId
+ */
+export function removeMemberByUserId(room, userId) {
+  const members = ensureMembers(room);
+  for (const [key, member] of Object.entries(members)) {
+    if (member.userId === userId) {
+      delete members[key];
+    }
+  }
+  touchRoom(room);
 }

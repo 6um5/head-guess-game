@@ -28,6 +28,7 @@ function createSocketInstance(): Socket {
 
   instance.on("session", (payload: SessionPayload) => {
     setStoredSessionId(payload.sessionId);
+    instance.auth = { sessionId: payload.sessionId };
   });
 
   return instance;

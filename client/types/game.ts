@@ -45,6 +45,7 @@ export interface FighterInfo {
 }
 
 export interface GameStatePayload {
+  roomCode?: string;
   status: GameStatus;
   roundPhase: RoundPhase | null;
   roundNumber: number;

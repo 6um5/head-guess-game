@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectSocket } from "@/lib/socket";
+import {
+  setStoredRoomCode,
+  setStoredUsername,
+} from "@/lib/sessionStorage";
 import type {
   AppScreen,
   ChatMessage,
@@ -132,6 +136,12 @@ export function useGameSocket() {
 
   const applyGameState = useCallback(
     (payload: GameStatePayload, activeRoomCode: string | null) => {
+      const nextRoomCode = payload.roomCode ?? activeRoomCode;
+      if (nextRoomCode) {
+        roomCodeRef.current = nextRoomCode;
+        setRoomCode(nextRoomCode);
+        setStoredRoomCode(nextRoomCode);
+      }
       gameStatusRef.current = payload.status;
       setGameStatus(payload.status);
       setRoundPhase(payload.roundPhase);
@@ -154,7 +164,7 @@ export function useGameSocket() {
       setRoundWinner(payload.roundWinner);
       setMatchWinner(payload.matchWinner);
       syncPlayerMeta(payload.players);
-      setScreen(resolveScreen(activeRoomCode, payload.status));
+      setScreen(resolveScreen(nextRoomCode, payload.status));
 
       if (payload.roundPhase !== "selecting") {
         setIsGeneratingAI(false);
@@ -167,7 +177,9 @@ export function useGameSocket() {
     const socket = connectSocket();
 
     const handleConnect = () => setIsConnected(true);
-    const handleDisconnect = () => setIsConnected(false);
+    const handleDisconnect = () => {
+      setIsConnected(false);
+    };
 
     const handleSession = (payload: SessionPayload) => {
       userIdRef.current = payload.userId;
@@ -177,6 +189,7 @@ export function useGameSocket() {
     const handleRoomUpdated = (payload: RoomUpdatedPayload) => {
       roomCodeRef.current = payload.roomCode;
       setRoomCode(payload.roomCode);
+      setStoredRoomCode(payload.roomCode);
       syncPlayerMeta(payload.players);
       setError(null);
       setScreen(resolveScreen(payload.roomCode, gameStatusRef.current));
@@ -350,11 +363,14 @@ export function useGameSocket() {
 
   const createRoom = useCallback((username: string) => {
     setError(null);
+    setStoredUsername(username);
     connectSocket().emit("createRoom", { username });
   }, []);
 
   const joinRoom = useCallback((username: string, code: string) => {
     setError(null);
+    setStoredUsername(username);
+    setStoredRoomCode(code);
     connectSocket().emit("joinRoom", { username, roomCode: code });
   }, []);
 

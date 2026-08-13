@@ -66,6 +66,7 @@ export function buildPersonalizedGameState(
     (isAudience && isGuessing) || (hostSpectating && isWordSetup);
 
   return {
+    roomCode: room.code,
     status: room.status,
     roundPhase: room.roundPhase,
     roundNumber: room.roundNumber,

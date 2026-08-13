@@ -13,6 +13,7 @@ client/out/
 # Build & logs
 dist/
 build/
+server/data/
 *.log
 npm-debug.log*
 

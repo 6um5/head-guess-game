@@ -3,6 +3,10 @@
 /** @type {Map<string, Session>} */
 const sessions = new Map();
 
+export function getAllSessions() {
+  return sessions;
+}
+
 /**
  * @param {string} sessionId
  * @returns {Session | undefined}
@@ -51,6 +55,14 @@ export function setRoomHost(roomCode, hostUserId = null) {
 
     session.isHost = Boolean(hostUserId) && session.userId === hostUserId;
   }
+}
+
+/**
+ * @param {string} roomCode
+ * @returns {Session[]}
+ */
+export function getSessionsByRoom(roomCode) {
+  return [...sessions.values()].filter((session) => session.roomCode === roomCode);
 }
 
 /**
