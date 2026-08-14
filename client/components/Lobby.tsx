@@ -4,8 +4,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Check, Copy, Crown, Link2, Play, Trophy, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import CreditsFooter from "@/components/CreditsFooter";
+import LeaderboardPanel from "@/components/game/LeaderboardPanel";
 import InteractiveButton from "@/components/ui/InteractiveButton";
-import type { Player } from "@/types/game";
+import type { LeaderboardEntry, NextUpPair, Player } from "@/types/game";
 
 interface LobbyProps {
   roomCode: string;
@@ -13,6 +14,8 @@ interface LobbyProps {
   isHost: boolean;
   currentUserId: string | null;
   pointsToWin: number;
+  leaderboard: LeaderboardEntry[];
+  nextUp: NextUpPair | null;
   onPointsToWinChange: (value: number) => void;
   onStartGame: (pointsToWin: number) => void;
   onLeaveRoom: () => void;
@@ -25,6 +28,8 @@ export default function Lobby({
   isHost,
   currentUserId,
   pointsToWin,
+  leaderboard,
+  nextUp,
   onPointsToWinChange,
   onStartGame,
   onLeaveRoom,
@@ -32,6 +37,7 @@ export default function Lobby({
 }: LobbyProps) {
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   const roomLink = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -113,6 +119,14 @@ export default function Lobby({
             <Link2 className="h-4 w-4" />
             {copiedLink ? "تم نسخ الرابط" : "نسخ رابط الغرفة"}
           </InteractiveButton>
+          <InteractiveButton
+            variant="secondary"
+            onClick={() => setShowLeaderboard(true)}
+            className="!py-2 text-xs sm:text-sm"
+          >
+            <Trophy className="h-4 w-4" />
+            المتصدرون
+          </InteractiveButton>
         </div>
       </div>
 
@@ -172,12 +186,23 @@ export default function Lobby({
                     <p className="font-mono text-lg font-semibold text-violet-200">
                       {player.points}
                     </p>
+                    {(player.roundWins ?? 0) > 0 && (
+                      <p className="text-[10px] text-amber-300/80">
+                        {player.roundWins} جولة
+                      </p>
+                    )}
                   </div>
                 </motion.li>
               );
             })}
           </AnimatePresence>
         </ul>
+
+        {nextUp && players.length >= 2 && (
+          <p className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2.5 text-center text-xs text-emerald-100 sm:text-sm">
+            أول مبارزة بالدور: {nextUp.a.username} ضد {nextUp.b.username}
+          </p>
+        )}
 
         {error && (
           <p className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -236,6 +261,14 @@ export default function Lobby({
       <div className="mt-6">
         <CreditsFooter />
       </div>
+
+      <LeaderboardPanel
+        open={showLeaderboard}
+        entries={leaderboard}
+        currentUserId={currentUserId}
+        pointsToWin={pointsToWin}
+        onClose={() => setShowLeaderboard(false)}
+      />
     </motion.div>
   );
 }

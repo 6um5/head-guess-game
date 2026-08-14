@@ -6,7 +6,12 @@ import {
   ensureHints,
   ensureRoundClock,
   getRoom,
+  getUsedWords,
+  incrementMemberRoundWins,
+  recordDuelTurn,
+  rememberUsedWords,
   removeMemberByUserId,
+  resetDuelStats,
   resetHints,
   resetMemberPoints,
   resetRound,
@@ -21,14 +26,17 @@ import {
   getRoomFromSocket,
   isCorrectGuess,
   isHost,
+  measureGuessCloseness,
   sanitizeGuess,
   sanitizePointsToWin,
   sanitizeSecretWord,
 } from '../utils/gameUtils.js';
 import { emitRoomUpdated, getRoomPlayers } from '../utils/roomUtils.js';
+import { pickSequencePair, uniquePlayers } from '../utils/turnOrder.js';
 
 const ROUND_END_DELAY_MS = 4500;
 const MAX_PERSONAL_HINTS = 4;
+const MAX_PEER_HINT_LENGTH = 120;
 
 const ALLOWED_CATEGORIES = new Set([
   'شخصيات عربية مشهورة',
@@ -89,20 +97,38 @@ function findPlayer(players, userId) {
  * @param {import('../types/player.js').RoomPlayer[]} players
  */
 function pickRandomPair(players) {
-  const unique = [];
-  const seen = new Set();
-
-  for (const player of players) {
-    if (!player?.userId || seen.has(player.userId)) {
-      continue;
-    }
-    seen.add(player.userId);
-    unique.push(player);
-  }
+  const unique = uniquePlayers(players);
 
   if (unique.length < 2) return null;
   const shuffled = [...unique].sort(() => Math.random() - 0.5);
   return [shuffled[0], shuffled[1]];
+}
+
+/**
+ * Resolves the duel pair from the host request, supporting manual,
+ * random, and fair turn-order selection.
+ *
+ * @param {import('../types/room.js').Room} room
+ * @param {import('../types/player.js').RoomPlayer[]} players
+ * @param {{ playerAId?: string, playerBId?: string, random?: boolean, sequence?: boolean }} request
+ */
+function resolveDuelPair(room, players, request) {
+  if (request.sequence === true) {
+    return pickSequencePair(room, players);
+  }
+
+  if (request.random === true) {
+    return pickRandomPair(players);
+  }
+
+  const playerA = findPlayer(players, request.playerAId);
+  const playerB = findPlayer(players, request.playerBId);
+
+  if (!playerA || !playerB) {
+    return null;
+  }
+
+  return [playerA, playerB];
 }
 
 /**
@@ -288,6 +314,7 @@ export function registerGameHandlers(io, socket) {
       room.revealedWordB = null;
 
       resetMemberPoints(room);
+      resetDuelStats(room);
       for (const roomSession of getSessionsByRoom(room.code)) {
         roomSession.points = 0;
         saveSession(roomSession);
@@ -308,93 +335,98 @@ export function registerGameHandlers(io, socket) {
     }
   });
 
-  socket.on('startDuel', async ({ playerAId, playerBId, random, category }) => {
-    try {
-      if (!isHost(socket)) {
-        emitGameError(socket, 'فقط المضيف يمكنه بدء المبارزة.');
-        return;
-      }
-
-      const room = getRoomFromSocket(socket);
-      const selectedCategory =
-        typeof category === 'string' ? category.trim() : '';
-
-      if (!room || room.status !== 'playing' || room.roundPhase !== 'selecting') {
-        emitGameError(socket, 'اختيار المبارزة متاح فقط أثناء مرحلة الاختيار.');
-        return;
-      }
-
-      if (!ALLOWED_CATEGORIES.has(selectedCategory)) {
-        emitGameError(socket, 'تصنيف غير صالح.');
-        return;
-      }
-
-      const players = await getRoomPlayers(io, room.code);
-
-      if (players.length < 2) {
-        emitGameError(socket, 'تحتاج لاعبين على الأقل.');
-        return;
-      }
-
-      let playerA = null;
-      let playerB = null;
-
-      if (random === true) {
-        const pair = pickRandomPair(players);
-        if (!pair) {
-          emitGameError(socket, 'تعذر اختيار لاعبين عشوائياً.');
+  socket.on(
+    'startDuel',
+    async ({ playerAId, playerBId, random, sequence, category }) => {
+      try {
+        if (!isHost(socket)) {
+          emitGameError(socket, 'فقط المضيف يمكنه بدء المبارزة.');
           return;
         }
-        [playerA, playerB] = pair;
-      } else {
-        playerA = findPlayer(players, playerAId);
-        playerB = findPlayer(players, playerBId);
+
+        const room = getRoomFromSocket(socket);
+        const selectedCategory =
+          typeof category === 'string' ? category.trim() : '';
+
+        if (!room || room.status !== 'playing' || room.roundPhase !== 'selecting') {
+          emitGameError(socket, 'اختيار المبارزة متاح فقط أثناء مرحلة الاختيار.');
+          return;
+        }
+
+        if (!ALLOWED_CATEGORIES.has(selectedCategory)) {
+          emitGameError(socket, 'تصنيف غير صالح.');
+          return;
+        }
+
+        const players = await getRoomPlayers(io, room.code);
+
+        if (players.length < 2) {
+          emitGameError(socket, 'تحتاج لاعبين على الأقل.');
+          return;
+        }
+
+        const pair = resolveDuelPair(room, players, {
+          playerAId,
+          playerBId,
+          random,
+          sequence,
+        });
+
+        if (!pair || pair[0].userId === pair[1].userId) {
+          emitGameError(socket, 'اختر لاعبين مختلفين للمبارزة.');
+          return;
+        }
+
+        const [playerA, playerB] = pair;
+
+        io.to(room.code).emit('aiGenerating', { category: selectedCategory });
+
+        const [rawWordA, rawWordB] = await generateTwoDistinctWords(
+          selectedCategory,
+          getUsedWords(room),
+        );
+        const allowNumber = selectedCategory === 'أرقام سهلة';
+        const wordA = sanitizeSecretWord(rawWordA, { allowNumber });
+        const wordB = sanitizeSecretWord(rawWordB, { allowNumber });
+
+        if (!wordA || !wordB) {
+          emitGameError(socket, 'فشل توليد كلمتين صالحتين. حاول مرة أخرى.');
+          return;
+        }
+
+        clearRoundResetTimer(room);
+        room.roundNumber += 1;
+        room.status = 'playing';
+        room.roundPhase = 'guessing';
+        assignFighters(room, playerA, playerB, selectedCategory, false);
+        room.fighterA.word = wordA;
+        room.fighterA.wordReady = true;
+        room.fighterB.word = wordB;
+        room.fighterB.wordReady = true;
+        rememberUsedWords(room, [wordA, wordB]);
+        recordDuelTurn(room, playerA.userId, playerB.userId, room.roundNumber);
+        schedulePersist();
+
+        io.to(room.code).emit('roundStarted', {
+          category: selectedCategory,
+          roundNumber: room.roundNumber,
+          fighterA: { userId: playerA.userId, username: playerA.username },
+          fighterB: { userId: playerB.userId, username: playerB.username },
+          message: `تم اختيار الكلمتين! التصنيف: ${selectedCategory}`,
+        });
+
+        startRoundClockIfEnabled(io, room);
+        await emitGameState(io, room.code);
+      } catch (error) {
+        console.error('startDuel failed:', error);
+        emitGameError(socket, 'تعذر بدء المبارزة. حاول مرة أخرى.');
       }
+    },
+  );
 
-      if (!playerA || !playerB || playerA.userId === playerB.userId) {
-        emitGameError(socket, 'اختر لاعبين مختلفين للمبارزة.');
-        return;
-      }
-
-      io.to(room.code).emit('aiGenerating', { category: selectedCategory });
-
-      const [rawWordA, rawWordB] = await generateTwoDistinctWords(selectedCategory);
-      const allowNumber = selectedCategory === 'أرقام سهلة';
-      const wordA = sanitizeSecretWord(rawWordA, { allowNumber });
-      const wordB = sanitizeSecretWord(rawWordB, { allowNumber });
-
-      if (!wordA || !wordB) {
-        emitGameError(socket, 'فشل توليد كلمتين صالحتين. حاول مرة أخرى.');
-        return;
-      }
-
-      clearRoundResetTimer(room);
-      room.roundNumber += 1;
-      room.status = 'playing';
-      room.roundPhase = 'guessing';
-      assignFighters(room, playerA, playerB, selectedCategory, false);
-      room.fighterA.word = wordA;
-      room.fighterA.wordReady = true;
-      room.fighterB.word = wordB;
-      room.fighterB.wordReady = true;
-
-      io.to(room.code).emit('roundStarted', {
-        category: selectedCategory,
-        roundNumber: room.roundNumber,
-        fighterA: { userId: playerA.userId, username: playerA.username },
-        fighterB: { userId: playerB.userId, username: playerB.username },
-        message: `تم اختيار الكلمتين! التصنيف: ${selectedCategory}`,
-      });
-
-      startRoundClockIfEnabled(io, room);
-      await emitGameState(io, room.code);
-    } catch (error) {
-      console.error('startDuel failed:', error);
-      emitGameError(socket, 'تعذر بدء المبارزة. حاول مرة أخرى.');
-    }
-  });
-
-  socket.on('startCustomDuel', async ({ playerAId, playerBId, random, mode }) => {
+  socket.on(
+    'startCustomDuel',
+    async ({ playerAId, playerBId, random, sequence, mode }) => {
     try {
       if (!isHost(socket)) {
         emitGameError(socket, 'فقط المضيف يمكنه بدء جولة مخصصة.');
@@ -409,25 +441,19 @@ export function registerGameHandlers(io, socket) {
       }
 
       const players = await getRoomPlayers(io, room.code);
-      let playerA = null;
-      let playerB = null;
+      const pair = resolveDuelPair(room, players, {
+        playerAId,
+        playerBId,
+        random,
+        sequence,
+      });
 
-      if (random === true) {
-        const pair = pickRandomPair(players);
-        if (!pair) {
-          emitGameError(socket, 'تعذر اختيار لاعبين.');
-          return;
-        }
-        [playerA, playerB] = pair;
-      } else {
-        playerA = findPlayer(players, playerAId);
-        playerB = findPlayer(players, playerBId);
-      }
-
-      if (!playerA || !playerB || playerA.userId === playerB.userId) {
+      if (!pair || pair[0].userId === pair[1].userId) {
         emitGameError(socket, 'اختر لاعبين مختلفين.');
         return;
       }
+
+      const [playerA, playerB] = pair;
 
       const customMode = mode === 'numbers' ? 'numbers' : 'words';
       const category =
@@ -440,6 +466,8 @@ export function registerGameHandlers(io, socket) {
       room.status = 'playing';
       room.roundPhase = 'word_setup';
       assignFighters(room, playerA, playerB, category, true, customMode);
+      recordDuelTurn(room, playerA.userId, playerB.userId, room.roundNumber);
+      schedulePersist();
 
       io.to(room.code).emit('customSetupStarted', {
         roundNumber: room.roundNumber,
@@ -457,7 +485,8 @@ export function registerGameHandlers(io, socket) {
       console.error('startCustomDuel failed:', error);
       emitGameError(socket, 'تعذر بدء الإعداد المخصص.');
     }
-  });
+    },
+  );
 
   socket.on('proposeWord', async ({ word }) => {
     try {
@@ -594,6 +623,8 @@ export function registerGameHandlers(io, socket) {
 
       room.roundPhase = 'guessing';
       room.status = 'playing';
+      rememberUsedWords(room, [room.fighterA.word, room.fighterB.word]);
+      schedulePersist();
 
       io.to(room.code).emit('roundStarted', {
         category: room.category,
@@ -753,24 +784,166 @@ export function registerGameHandlers(io, socket) {
 
       const nextLevel = (isA ? hints.hintsForA.length : hints.hintsForB.length) + 1;
       const hint = await generateHint(secret, room.category, nextLevel);
+      const entry = { text: hint, source: 'ai', from: null };
 
       if (isA) {
         hints.requestsA += 1;
-        hints.hintsForA.push(hint);
+        hints.hintsForA.push(entry);
       } else {
         hints.requestsB += 1;
-        hints.hintsForB.push(hint);
+        hints.hintsForB.push(entry);
       }
       hints.level = Math.max(hints.hintsForA.length, hints.hintsForB.length);
 
       io.to(room.code).emit('hintsUpdated', {
         level: hints.level,
-        message: `${session.username} طلب تلميحاً جديداً`,
+        message: `${session.username} طلب تلميحاً من الذكاء الاصطناعي`,
       });
 
       await emitGameState(io, room.code);
     } catch (error) {
       console.error('requestPersonalHint failed:', error);
+      emitGameError(socket, 'تعذر إرسال التلميح.');
+    }
+  });
+
+  socket.on('requestPeerHint', async () => {
+    try {
+      const room = getRoomFromSocket(socket);
+      const { session } = socket.data;
+
+      if (!room || room.roundPhase !== 'guessing') {
+        emitGameError(socket, 'طلب التلميح متاح أثناء الحزر فقط.');
+        return;
+      }
+
+      const hints = ensureHints(room);
+
+      if (!hints.enabled) {
+        emitGameError(socket, 'التلميحات غير مفعّلة بعد.');
+        return;
+      }
+
+      const isA = session.userId === room.fighterA?.userId;
+      const isB = session.userId === room.fighterB?.userId;
+
+      if (!isA && !isB) {
+        emitGameError(socket, 'فقط المتبارزان يطلبان التلميحات.');
+        return;
+      }
+
+      const maxRequests = hints.maxRequests ?? MAX_PERSONAL_HINTS;
+      const used = isA ? hints.requestsA : hints.requestsB;
+
+      if (used >= maxRequests) {
+        emitGameError(socket, 'استهلكت كل طلبات التلميح لهذه الجولة.');
+        return;
+      }
+
+      if ((isA && hints.askedA) || (isB && hints.askedB)) {
+        emitGameError(socket, 'طلبك بانتظار رد خصمك.');
+        return;
+      }
+
+      if (isA) hints.askedA = true;
+      if (isB) hints.askedB = true;
+
+      const opponentId = isA ? room.fighterB?.userId : room.fighterA?.userId;
+      const opponentSocket = opponentId
+        ? await findSocketByUserId(io, room.code, opponentId)
+        : null;
+
+      opponentSocket?.emit('peerHintRequested', {
+        from: session.username,
+        message: `${session.username} يطلب منك تلميحاً عن كلمتك.`,
+      });
+
+      io.to(room.code).emit('hintsUpdated', {
+        level: hints.level ?? 0,
+        message: `${session.username} طلب تلميحاً من خصمه`,
+      });
+
+      await emitGameState(io, room.code);
+    } catch (error) {
+      console.error('requestPeerHint failed:', error);
+      emitGameError(socket, 'تعذر إرسال الطلب.');
+    }
+  });
+
+  socket.on('sendPeerHint', async ({ text } = {}) => {
+    try {
+      const room = getRoomFromSocket(socket);
+      const { session } = socket.data;
+
+      if (!room || room.roundPhase !== 'guessing') {
+        emitGameError(socket, 'إرسال التلميح متاح أثناء الحزر فقط.');
+        return;
+      }
+
+      const hints = ensureHints(room);
+      const isA = session.userId === room.fighterA?.userId;
+      const isB = session.userId === room.fighterB?.userId;
+
+      if (!isA && !isB) {
+        emitGameError(socket, 'فقط المتبارزان يكتبان التلميحات.');
+        return;
+      }
+
+      // A writes for B only when B asked, and vice versa.
+      const opponentAsked = isA ? hints.askedB : hints.askedA;
+
+      if (!opponentAsked) {
+        emitGameError(socket, 'خصمك لم يطلب تلميحاً بعد.');
+        return;
+      }
+
+      const hintText = String(text ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (hintText.length < 2 || hintText.length > MAX_PEER_HINT_LENGTH) {
+        emitGameError(socket, `اكتب تلميحاً بين 2 و ${MAX_PEER_HINT_LENGTH} حرفاً.`);
+        return;
+      }
+
+      // The writer owns the secret their opponent is trying to guess.
+      const mySecret = isA ? room.fighterA?.word : room.fighterB?.word;
+
+      if (mySecret && isCorrectGuess(hintText, mySecret)) {
+        emitGameError(socket, 'التلميح لا يجوز أن يكون الكلمة نفسها.');
+        return;
+      }
+
+      if (
+        mySecret &&
+        hintText.toLowerCase().includes(String(mySecret).toLowerCase())
+      ) {
+        emitGameError(socket, 'التلميح يكشف كلمتك — اكتب تلميحاً غير مباشر.');
+        return;
+      }
+
+      const entry = { text: hintText, source: 'peer', from: session.username };
+
+      if (isA) {
+        hints.hintsForB.push(entry);
+        hints.requestsB += 1;
+        hints.askedB = false;
+      } else {
+        hints.hintsForA.push(entry);
+        hints.requestsA += 1;
+        hints.askedA = false;
+      }
+
+      hints.level = Math.max(hints.hintsForA.length, hints.hintsForB.length);
+
+      io.to(room.code).emit('hintsUpdated', {
+        level: hints.level,
+        message: `${session.username} أرسل تلميحاً لخصمه`,
+      });
+
+      await emitGameState(io, room.code);
+    } catch (error) {
+      console.error('sendPeerHint failed:', error);
       emitGameError(socket, 'تعذر إرسال التلميح.');
     }
   });
@@ -914,10 +1087,19 @@ export function registerGameHandlers(io, socket) {
 
       if (room.roundWinner) return;
 
-      if (isCorrectGuess(sanitizedGuess, targetWord)) {
+      if (!isCorrectGuess(sanitizedGuess, targetWord)) {
+        const closeness = measureGuessCloseness(sanitizedGuess, targetWord);
+        if (closeness) {
+          socket.emit('guessFeedback', closeness);
+        }
+        return;
+      }
+
+      {
         session.points += 1;
         saveSession(session);
         setMemberPoints(room, session.userId, session.points);
+        incrementMemberRoundWins(room, session.userId);
         schedulePersist();
 
         room.roundWinner = {

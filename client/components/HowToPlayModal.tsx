@@ -68,6 +68,11 @@ export default function HowToPlayModal({ open, onClose }: HowToPlayModalProps) {
                   <li>أنشئ غرفة أو انضم بكود/رابط.</li>
                   <li>المضيف يحدد حد الفوز (مثلاً 5 نقاط).</li>
                   <li>بعد بدء المباراة يختار المضيف لاعبين للمبارزة 1 ضد 1.</li>
+                  <li>
+                    مع 3 لاعبين أو أكثر، وضع «بالدور» يوزّع المبارزات بالعدل
+                    ويظهر من عليه الدور القادم.
+                  </li>
+                  <li>لو خرجت أو حدّثت الصفحة، ترجع بنفس اسمك ونقاطك.</li>
                 </ul>
               </section>
 
@@ -87,12 +92,29 @@ export default function HowToPlayModal({ open, onClose }: HowToPlayModalProps) {
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="mb-2 font-semibold text-emerald-200">الذكاء الاصطناعي والتلميحات</p>
+                <p className="mb-2 font-semibold text-emerald-200">الكلمات والتلميحات</p>
                 <ul className="list-disc space-y-1 pr-5">
-                  <li>يمكن توليد كلمات سهلة حسب التصنيف أو أرقام (حزر المليار).</li>
+                  <li>
+                    الذكاء الاصطناعي يختار الكلمات ولا يكرر أي كلمة استُعملت في
+                    نفس الغرفة.
+                  </li>
                   <li>أو إدخال كلمة/رقم مخصص بموافقة المضيف.</li>
                   <li>التلميحات: يوافق المتبارزان أولاً، ثم يوافق المضيف أو يرفض.</li>
-                  <li>بعد الموافقة تصبح التلميحات تلقائية من الذكاء الاصطناعي.</li>
+                  <li>
+                    بعد الموافقة يطلب كل لاعب تلميحاً من خصمه — لأن خصمك هو من
+                    يعرف كلمتك ويكتب لك التلميح.
+                  </li>
+                  <li>يوجد أيضاً تلميح ذكاء اصطناعي، لكنه صعب ومقصود الغموض.</li>
+                  <li>لو اقترب تخمينك من الجواب تظهر لك إشارة «حار» أو «دافئ».</li>
+                </ul>
+              </section>
+
+              <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="mb-2 font-semibold text-amber-200">لوحة المتصدرين</p>
+                <ul className="list-disc space-y-1 pr-5">
+                  <li>زر «المتصدرون» يظهر الترتيب في اللوبي وداخل المبارزة.</li>
+                  <li>الترتيب حسب النقاط، ثم عدد الجولات الكاملة المكسوبة.</li>
+                  <li>يظهر أيضاً من غادر الغرفة مع نقاطه المحفوظة.</li>
                 </ul>
               </section>
 

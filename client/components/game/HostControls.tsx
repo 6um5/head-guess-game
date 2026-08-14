@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import {
   Crown,
+  ListOrdered,
   Loader2,
   PencilLine,
   Shuffle,
@@ -13,7 +14,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AI_CATEGORIES, type Player } from "@/types/game";
+import { AI_CATEGORIES, type NextUpPair, type Player } from "@/types/game";
 
 interface HostControlsProps {
   players: Player[];
@@ -23,14 +24,17 @@ interface HostControlsProps {
   isGeneratingAI: boolean;
   roundClockEnabled: boolean;
   roundClockDurationSec: number;
+  nextUp: NextUpPair | null;
   onStartDuel: (payload: {
     category: string;
     random?: boolean;
+    sequence?: boolean;
     playerAId?: string;
     playerBId?: string;
   }) => void;
   onStartCustomDuel: (payload: {
     random?: boolean;
+    sequence?: boolean;
     playerAId?: string;
     playerBId?: string;
     mode?: "words" | "numbers";
@@ -43,6 +47,8 @@ interface HostControlsProps {
   }) => void;
 }
 
+type PickMode = "manual" | "random" | "sequence";
+
 export default function HostControls({
   players,
   currentUserId,
@@ -51,6 +57,7 @@ export default function HostControls({
   isGeneratingAI,
   roundClockEnabled,
   roundClockDurationSec,
+  nextUp,
   onStartDuel,
   onStartCustomDuel,
   onSkipRound,
@@ -59,7 +66,7 @@ export default function HostControls({
 }: HostControlsProps) {
   const [fighterAId, setFighterAId] = useState<string | null>(null);
   const [fighterBId, setFighterBId] = useState<string | null>(null);
-  const [useRandom, setUseRandom] = useState(false);
+  const [pickMode, setPickMode] = useState<PickMode>("sequence");
   const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
   const [customPick, setCustomPick] = useState<"words" | "numbers" | null>(
     null,
@@ -80,7 +87,7 @@ export default function HostControls({
     if (roundPhase === "selecting") {
       setFighterAId(null);
       setFighterBId(null);
-      setUseRandom(false);
+      setPickMode("sequence");
       setCustomPick(null);
     }
   }, [roundPhase]);
@@ -91,7 +98,7 @@ export default function HostControls({
 
   const handlePickPlayer = (userId: string) => {
     if (isGeneratingAI) return;
-    setUseRandom(false);
+    setPickMode("manual");
     if (!fighterAId || fighterAId === userId) {
       setFighterAId(userId);
       if (fighterBId === userId) setFighterBId(null);
@@ -100,12 +107,27 @@ export default function HostControls({
     setFighterBId(userId);
   };
 
-  const canLaunch = useRandom || Boolean(fighterAId && fighterBId);
+  const enoughPlayers = players.length >= 2;
+  const canLaunch =
+    pickMode === "manual"
+      ? Boolean(fighterAId && fighterBId)
+      : enoughPlayers;
 
-  const pairPayload = () =>
-    useRandom
-      ? { random: true as const }
-      : { playerAId: fighterAId!, playerBId: fighterBId! };
+  const pairPayload = () => {
+    if (pickMode === "sequence") return { sequence: true as const };
+    if (pickMode === "random") return { random: true as const };
+    return { playerAId: fighterAId!, playerBId: fighterBId! };
+  };
+
+  const slotLabel = (slot: "a" | "b") => {
+    if (pickMode === "sequence") {
+      const player = slot === "a" ? nextUp?.a : nextUp?.b;
+      return player?.username ?? "بالدور";
+    }
+    if (pickMode === "random") return "عشوائي";
+    const id = slot === "a" ? fighterAId : fighterBId;
+    return players.find((player) => player.userId === id)?.username ?? "—";
+  };
 
   const launchDuel = (category: string) => {
     if (isGeneratingAI || !canLaunch) return;
@@ -128,56 +150,80 @@ export default function HostControls({
             className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4 sm:p-5"
             dir="rtl"
           >
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="flex items-center gap-2 text-sm font-semibold text-amber-100 sm:text-base">
-                  <Swords className="h-4 w-4" />
-                  اختر المتبارزين (1 ضد 1)
-                </p>
-                <p className="text-xs text-slate-400 sm:text-sm">
-                  اختر لاعبين للمبارزة — يمكنك اختيار نفسك للعب مع صديقك
-                </p>
-              </div>
+            <div className="mb-3">
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-100 sm:text-base">
+                <Swords className="h-4 w-4" />
+                اختر المتبارزين (1 ضد 1)
+              </p>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                التسلسل الذكي يوزّع الأدوار بالعدل بين كل اللاعبين
+              </p>
+            </div>
+
+            <div className="mb-3 grid grid-cols-3 gap-2">
               <button
                 type="button"
-                disabled={isGeneratingAI || players.length < 2}
+                disabled={isGeneratingAI || !enoughPlayers}
                 onClick={() => {
-                  setUseRandom(true);
+                  setPickMode("sequence");
                   setFighterAId(null);
                   setFighterBId(null);
                 }}
-                className={`touch-target inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-slate-950 sm:w-auto ${
-                  useRandom ? "bg-amber-400" : "bg-amber-500"
+                className={`touch-target inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm ${
+                  pickMode === "sequence"
+                    ? "bg-emerald-400 text-slate-950"
+                    : "border border-white/10 bg-white/5 text-slate-300"
+                } disabled:opacity-50`}
+              >
+                <ListOrdered className="h-4 w-4" />
+                بالدور
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingAI || !enoughPlayers}
+                onClick={() => {
+                  setPickMode("random");
+                  setFighterAId(null);
+                  setFighterBId(null);
+                }}
+                className={`touch-target inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm ${
+                  pickMode === "random"
+                    ? "bg-amber-400 text-slate-950"
+                    : "border border-white/10 bg-white/5 text-slate-300"
                 } disabled:opacity-50`}
               >
                 <Shuffle className="h-4 w-4" />
-                {useRandom ? "عشوائي مفعّل" : "اختيار عشوائي"}
+                عشوائي
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingAI}
+                onClick={() => setPickMode("manual")}
+                className={`touch-target inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm ${
+                  pickMode === "manual"
+                    ? "bg-violet-400 text-slate-950"
+                    : "border border-white/10 bg-white/5 text-slate-300"
+                } disabled:opacity-50`}
+              >
+                يدوي
               </button>
             </div>
 
             <div className="mb-3 grid grid-cols-2 gap-2 text-center text-xs sm:text-sm">
               <div className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-2 py-2">
                 <p className="text-slate-400">اللاعب أ</p>
-                <p className="truncate font-semibold text-white">
-                  {useRandom
-                    ? "عشوائي"
-                    : players.find((p) => p.userId === fighterAId)?.username ?? "—"}
-                </p>
+                <p className="truncate font-semibold text-white">{slotLabel("a")}</p>
               </div>
               <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-2 py-2">
                 <p className="text-slate-400">اللاعب ب</p>
-                <p className="truncate font-semibold text-white">
-                  {useRandom
-                    ? "عشوائي"
-                    : players.find((p) => p.userId === fighterBId)?.username ?? "—"}
-                </p>
+                <p className="truncate font-semibold text-white">{slotLabel("b")}</p>
               </div>
             </div>
 
             <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {players.map((player) => {
-                const isA = !useRandom && player.userId === fighterAId;
-                const isB = !useRandom && player.userId === fighterBId;
+                const isA = pickMode === "manual" && player.userId === fighterAId;
+                const isB = pickMode === "manual" && player.userId === fighterBId;
                 return (
                   <li key={player.userId}>
                     <button

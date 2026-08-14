@@ -48,6 +48,9 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
     isGeneratingAI,
     canGuess,
     currentUserId,
+    leaderboard,
+    nextUp,
+    guessFeedback,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -63,6 +66,8 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
     approveHints,
     rejectHints,
     requestPersonalHint,
+    requestPeerHint,
+    sendPeerHint,
     setRoundTimer,
     returnToLobby,
     sendGuess,
@@ -116,6 +121,9 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
             showRoundStartedBanner={showRoundStartedBanner}
             roundWinner={roundWinner}
             matchWinner={matchWinner}
+            leaderboard={leaderboard}
+            nextUp={nextUp}
+            guessFeedback={guessFeedback}
             onStartDuel={startDuel}
             onStartCustomDuel={startCustomDuel}
             onProposeWord={proposeWord}
@@ -126,6 +134,8 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
             onApproveHints={approveHints}
             onRejectHints={rejectHints}
             onRequestPersonalHint={requestPersonalHint}
+            onRequestPeerHint={requestPeerHint}
+            onSendPeerHint={sendPeerHint}
             onSetRoundTimer={setRoundTimer}
             onReturnToLobby={returnToLobby}
             onSendGuess={sendGuess}
@@ -184,6 +194,8 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
                       isHost={isHost}
                       currentUserId={session?.userId ?? null}
                       pointsToWin={pointsToWin}
+                      leaderboard={leaderboard}
+                      nextUp={nextUp}
                       onPointsToWinChange={updatePointsToWin}
                       onStartGame={startGame}
                       onLeaveRoom={leaveRoom}

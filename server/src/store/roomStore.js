@@ -23,6 +23,8 @@ export function createHintState() {
     requestsA: 0,
     requestsB: 0,
     maxRequests: 4,
+    askedA: false,
+    askedB: false,
     timer: null,
   };
 }
@@ -68,6 +70,9 @@ export function createRoomRecord(code) {
     hostUserId: null,
     lastActivityAt: Date.now(),
     members: {},
+    usedWords: [],
+    duelStats: {},
+    lastPairKey: null,
   };
 
   rooms.set(code, room);
@@ -292,6 +297,7 @@ export function upsertMember(room, player) {
     userId: player.userId,
     username: player.username,
     points: Number.isFinite(player.points) ? player.points : previous?.points ?? 0,
+    roundWins: previous?.roundWins ?? 0,
     isHost: Boolean(player.isHost),
     lastSeen: Date.now(),
   };
@@ -343,6 +349,20 @@ export function setMemberPoints(room, userId, points) {
 export function resetMemberPoints(room) {
   for (const member of Object.values(ensureMembers(room))) {
     member.points = 0;
+    member.roundWins = 0;
+  }
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ * @param {string} userId
+ */
+export function incrementMemberRoundWins(room, userId) {
+  const member = findMemberByUserId(room, userId);
+  if (member) {
+    member.roundWins = (member.roundWins ?? 0) + 1;
+    member.lastSeen = Date.now();
   }
   touchRoom(room);
 }
@@ -358,5 +378,99 @@ export function removeMemberByUserId(room, userId) {
       delete members[key];
     }
   }
+  touchRoom(room);
+}
+
+const MAX_REMEMBERED_WORDS = 120;
+
+/**
+ * @param {Room} room
+ * @returns {string[]}
+ */
+export function getUsedWords(room) {
+  if (!Array.isArray(room.usedWords)) {
+    room.usedWords = [];
+  }
+  return room.usedWords;
+}
+
+/**
+ * Remembers secret words so the AI never repeats them inside the same room.
+ * @param {Room} room
+ * @param {Array<string | null | undefined>} words
+ */
+export function rememberUsedWords(room, words) {
+  const used = getUsedWords(room);
+
+  for (const word of words) {
+    const value = String(word ?? '').trim();
+    if (!value) continue;
+    if (!used.some((entry) => usernameKey(entry) === usernameKey(value))) {
+      used.push(value);
+    }
+  }
+
+  if (used.length > MAX_REMEMBERED_WORDS) {
+    room.usedWords = used.slice(-MAX_REMEMBERED_WORDS);
+  }
+
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ */
+export function clearUsedWords(room) {
+  room.usedWords = [];
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ * @returns {Record<string, { duels: number, lastRound: number }>}
+ */
+export function ensureDuelStats(room) {
+  if (!room.duelStats || typeof room.duelStats !== 'object') {
+    room.duelStats = {};
+  }
+  return room.duelStats;
+}
+
+/**
+ * @param {string} userIdA
+ * @param {string} userIdB
+ * @returns {string}
+ */
+export function pairKey(userIdA, userIdB) {
+  return [userIdA, userIdB].sort().join('|');
+}
+
+/**
+ * @param {Room} room
+ * @param {string} userIdA
+ * @param {string} userIdB
+ * @param {number} roundNumber
+ */
+export function recordDuelTurn(room, userIdA, userIdB, roundNumber) {
+  const stats = ensureDuelStats(room);
+
+  for (const userId of [userIdA, userIdB]) {
+    const entry = stats[userId] ?? { duels: 0, lastRound: -1 };
+    stats[userId] = {
+      duels: (entry.duels ?? 0) + 1,
+      lastRound: roundNumber,
+    };
+  }
+
+  room.lastPairKey = pairKey(userIdA, userIdB);
+  touchRoom(room);
+}
+
+/**
+ * @param {Room} room
+ */
+export function resetDuelStats(room) {
+  room.duelStats = {};
+  room.lastPairKey = null;
   touchRoom(room);
 }

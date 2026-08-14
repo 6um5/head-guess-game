@@ -13,8 +13,11 @@ import type {
   GameErrorPayload,
   GameStatePayload,
   GameStatus,
+  GuessFeedback,
   HintsState,
   KickedPayload,
+  LeaderboardEntry,
+  NextUpPair,
   Player,
   PlayerRole,
   RoomErrorPayload,
@@ -40,6 +43,9 @@ const EMPTY_HINTS: HintsState = {
   maxRequests: 4,
   myRequests: 0,
   canRequestHint: false,
+  waitingForOpponentHint: false,
+  opponentWaitingForMyHint: false,
+  opponentName: null,
 };
 
 const EMPTY_CLOCK: RoundClockState = {
@@ -103,6 +109,9 @@ export function useGameSocket() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [showRoundStartedBanner, setShowRoundStartedBanner] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [nextUp, setNextUp] = useState<NextUpPair | null>(null);
+  const [guessFeedback, setGuessFeedback] = useState<GuessFeedback | null>(null);
 
   const resetToHome = useCallback((message?: string) => {
     gameStatusRef.current = "waiting";
@@ -123,6 +132,9 @@ export function useGameSocket() {
     setHints(EMPTY_HINTS);
     setRoundClock(EMPTY_CLOCK);
     setIsHost(false);
+    setLeaderboard([]);
+    setNextUp(null);
+    setGuessFeedback(null);
     if (message) setError(message);
   }, []);
 
@@ -163,6 +175,8 @@ export function useGameSocket() {
       setMessages(payload.messages);
       setRoundWinner(payload.roundWinner);
       setMatchWinner(payload.matchWinner);
+      setNextUp(payload.nextUp ?? null);
+      if (payload.leaderboard) setLeaderboard(payload.leaderboard);
       syncPlayerMeta(payload.players);
       setScreen(resolveScreen(nextRoomCode, payload.status));
 
@@ -191,6 +205,7 @@ export function useGameSocket() {
       setRoomCode(payload.roomCode);
       setStoredRoomCode(payload.roomCode);
       syncPlayerMeta(payload.players);
+      if (payload.leaderboard) setLeaderboard(payload.leaderboard);
       setError(null);
       setScreen(resolveScreen(payload.roomCode, gameStatusRef.current));
     };
@@ -313,6 +328,15 @@ export function useGameSocket() {
       setStatusMessage(payload.message);
     };
 
+    const handlePeerHintRequested = (payload: { message: string }) => {
+      setStatusMessage(payload.message);
+    };
+
+    const handleGuessFeedback = (payload: GuessFeedback) => {
+      setGuessFeedback(payload);
+      window.setTimeout(() => setGuessFeedback(null), 2600);
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("session", handleSession);
@@ -333,6 +357,8 @@ export function useGameSocket() {
     socket.on("hintsRejected", handleHintsRejected);
     socket.on("hintsUpdated", handleHintsUpdated);
     socket.on("hintConsentUpdated", handleHintConsentUpdated);
+    socket.on("peerHintRequested", handlePeerHintRequested);
+    socket.on("guessFeedback", handleGuessFeedback);
 
     if (socket.connected) setIsConnected(true);
 
@@ -358,6 +384,8 @@ export function useGameSocket() {
       socket.off("hintsRejected", handleHintsRejected);
       socket.off("hintsUpdated", handleHintsUpdated);
       socket.off("hintConsentUpdated", handleHintConsentUpdated);
+      socket.off("peerHintRequested", handlePeerHintRequested);
+      socket.off("guessFeedback", handleGuessFeedback);
     };
   }, [applyGameState, resetToHome, syncPlayerMeta]);
 
@@ -397,6 +425,7 @@ export function useGameSocket() {
     (payload: {
       category: string;
       random?: boolean;
+      sequence?: boolean;
       playerAId?: string;
       playerBId?: string;
     }) => {
@@ -410,6 +439,7 @@ export function useGameSocket() {
   const startCustomDuel = useCallback(
     (payload: {
       random?: boolean;
+      sequence?: boolean;
       playerAId?: string;
       playerBId?: string;
       mode?: "words" | "numbers";
@@ -467,6 +497,16 @@ export function useGameSocket() {
 
   const requestPersonalHint = useCallback(() => {
     connectSocket().emit("requestPersonalHint");
+  }, []);
+
+  const requestPeerHint = useCallback(() => {
+    setError(null);
+    connectSocket().emit("requestPeerHint");
+  }, []);
+
+  const sendPeerHint = useCallback((text: string) => {
+    setError(null);
+    connectSocket().emit("sendPeerHint", { text });
   }, []);
 
   const setRoundTimer = useCallback(
@@ -559,6 +599,9 @@ export function useGameSocket() {
     isFighter,
     canGuess,
     currentUserId,
+    leaderboard,
+    nextUp,
+    guessFeedback,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -574,6 +617,8 @@ export function useGameSocket() {
     approveHints,
     rejectHints,
     requestPersonalHint,
+    requestPeerHint,
+    sendPeerHint,
     setRoundTimer,
     returnToLobby,
     sendGuess,

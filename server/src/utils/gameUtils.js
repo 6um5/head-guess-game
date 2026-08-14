@@ -1,10 +1,28 @@
 import { getRoom } from '../store/roomStore.js';
-import { getRoomPlayers } from './roomUtils.js';
+import { buildLeaderboard, getRoomPlayers } from './roomUtils.js';
+import { previewNextPair } from './turnOrder.js';
 
 /**
  * @typedef {import('../types/room.js').Room} Room
  * @typedef {import('../types/player.js').RoomPlayer} RoomPlayer
  */
+
+/**
+ * Hints may be stored as plain strings by older saved states.
+ * @param {Array<string | { text: string, source?: string, from?: string }>} list
+ */
+function normalizeHintList(list) {
+  return (Array.isArray(list) ? list : []).map((entry) => {
+    if (typeof entry === 'string') {
+      return { text: entry, source: 'ai', from: null };
+    }
+    return {
+      text: String(entry?.text ?? ''),
+      source: entry?.source === 'peer' ? 'peer' : 'ai',
+      from: entry?.from ?? null,
+    };
+  });
+}
 
 /**
  * Host sees both words only when not playing as a fighter (spectator host / audience).
@@ -65,6 +83,20 @@ export function buildPersonalizedGameState(
   const canSeeBothWords =
     (isAudience && isGuessing) || (hostSpectating && isWordSetup);
 
+  const hintsForA = normalizeHintList(room.hints?.hintsForA);
+  const hintsForB = normalizeHintList(room.hints?.hintsForB);
+  const maxRequests = room.hints?.maxRequests ?? 4;
+  const myRequests = isFighterA
+    ? room.hints?.requestsA ?? 0
+    : isFighterB
+      ? room.hints?.requestsB ?? 0
+      : 0;
+  const hintsEnabled = Boolean(room.hints?.enabled);
+  const askedA = Boolean(room.hints?.askedA);
+  const askedB = Boolean(room.hints?.askedB);
+  const iAmWaiting = (isFighterA && askedA) || (isFighterB && askedB);
+  const opponentIsWaiting = (isFighterA && askedB) || (isFighterB && askedA);
+
   return {
     roomCode: room.code,
     status: room.status,
@@ -101,29 +133,29 @@ export function buildPersonalizedGameState(
       consentB: Boolean(room.hints?.consentB),
       bothConsented: Boolean(room.hints?.consentA && room.hints?.consentB),
       hostApproved: Boolean(room.hints?.hostApproved),
-      enabled: Boolean(room.hints?.enabled),
+      enabled: hintsEnabled,
       myHints: isFighterA
-        ? room.hints?.hintsForA ?? []
+        ? hintsForA
         : isFighterB
-          ? room.hints?.hintsForB ?? []
+          ? hintsForB
           : [
-              ...(room.hints?.hintsForA ?? []).map((h) => `لـ أ: ${h}`),
-              ...(room.hints?.hintsForB ?? []).map((h) => `لـ ب: ${h}`),
+              ...hintsForA.map((hint) => ({ ...hint, text: `لـ أ: ${hint.text}` })),
+              ...hintsForB.map((hint) => ({ ...hint, text: `لـ ب: ${hint.text}` })),
             ],
-      hintsForA: isAudience ? room.hints?.hintsForA ?? [] : [],
-      hintsForB: isAudience ? room.hints?.hintsForB ?? [] : [],
+      hintsForA: isAudience ? hintsForA : [],
+      hintsForB: isAudience ? hintsForB : [],
       level: room.hints?.level ?? 0,
-      maxRequests: room.hints?.maxRequests ?? 4,
-      myRequests: isFighterA
-        ? room.hints?.requestsA ?? 0
-        : isFighterB
-          ? room.hints?.requestsB ?? 0
-          : 0,
+      maxRequests,
+      myRequests,
       canRequestHint:
-        Boolean(room.hints?.enabled) &&
-        isGuessing &&
-        ((isFighterA && (room.hints?.requestsA ?? 0) < (room.hints?.maxRequests ?? 4)) ||
-          (isFighterB && (room.hints?.requestsB ?? 0) < (room.hints?.maxRequests ?? 4))),
+        hintsEnabled && isGuessing && isFighter && myRequests < maxRequests,
+      waitingForOpponentHint: iAmWaiting,
+      opponentWaitingForMyHint: opponentIsWaiting && isGuessing,
+      opponentName: isFighterA
+        ? room.fighterB?.username ?? null
+        : isFighterB
+          ? room.fighterA?.username ?? null
+          : null,
     },
     roundClock: {
       enabled: Boolean(room.roundClock?.enabled),
@@ -139,6 +171,8 @@ export function buildPersonalizedGameState(
     roundWinner: room.roundWinner,
     matchWinner: room.matchWinner,
     players,
+    leaderboard: buildLeaderboard(room, players),
+    nextUp: previewNextPair(room, players),
   };
 }
 
@@ -195,14 +229,21 @@ export function sanitizeSecretWord(word, options = {}) {
 }
 
 /**
+ * Arabic-friendly normalisation so hamza/ta-marbuta spelling never blocks a win.
  * @param {string} value
  * @returns {string}
  */
 function normalizeForCompare(value) {
-  return value
+  return String(value ?? '')
     .trim()
     .toLowerCase()
     .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^\p{L}\p{N} ]/gu, '')
     .replace(/\s+/g, ' ');
 }
 
@@ -212,7 +253,78 @@ function normalizeForCompare(value) {
  * @returns {boolean}
  */
 export function isCorrectGuess(guess, secretWord) {
-  return normalizeForCompare(guess) === normalizeForCompare(secretWord);
+  const normalizedGuess = normalizeForCompare(guess);
+  const normalizedSecret = normalizeForCompare(secretWord);
+
+  if (!normalizedGuess || !normalizedSecret) {
+    return false;
+  }
+
+  return (
+    normalizedGuess === normalizedSecret ||
+    normalizedGuess.replace(/^ال/, '') === normalizedSecret.replace(/^ال/, '')
+  );
+}
+
+/**
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost,
+      );
+    }
+    previous = current;
+  }
+
+  return previous[b.length];
+}
+
+/**
+ * Private "hot / warm" feedback so a near miss feels rewarding.
+ * @param {string} guess
+ * @param {string} secretWord
+ * @returns {{ level: 'hot' | 'warm', message: string } | null}
+ */
+export function measureGuessCloseness(guess, secretWord) {
+  const normalizedGuess = normalizeForCompare(guess);
+  const normalizedSecret = normalizeForCompare(secretWord);
+
+  if (!normalizedGuess || !normalizedSecret || normalizedSecret.length < 3) {
+    return null;
+  }
+
+  const distance = editDistance(normalizedGuess, normalizedSecret);
+  const longest = Math.max(normalizedGuess.length, normalizedSecret.length);
+
+  if (distance <= 1 || distance / longest <= 0.2) {
+    return { level: 'hot', message: 'حار جداً — قريب من الجواب!' };
+  }
+
+  if (distance <= 2 || distance / longest <= 0.4) {
+    return { level: 'warm', message: 'دافئ — أنت على الطريق الصحيح.' };
+  }
+
+  const sharedPrefix = normalizedGuess.slice(0, 2) === normalizedSecret.slice(0, 2);
+  if (sharedPrefix && normalizedGuess.length >= 3) {
+    return { level: 'warm', message: 'دافئ — البداية صحيحة.' };
+  }
+
+  return null;
 }
 
 /**

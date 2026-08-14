@@ -1,7 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowRight, Clock, LogOut } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Clock, LogOut, Trophy } from "lucide-react";
+import { useState } from "react";
 import CreditsCredit from "@/components/CreditsCredit";
 import CreditsFooter from "@/components/CreditsFooter";
 import HelpButton from "@/components/HelpButton";
@@ -10,6 +11,7 @@ import GameStatusBar from "@/components/game/GameStatusBar";
 import GuessChat from "@/components/game/GuessChat";
 import HintsPanel from "@/components/game/HintsPanel";
 import HostControls from "@/components/game/HostControls";
+import LeaderboardPanel from "@/components/game/LeaderboardPanel";
 import RoundStartedBanner from "@/components/game/RoundStartedBanner";
 import WinOverlay from "@/components/game/WinOverlay";
 import WordSetupPanel from "@/components/game/WordSetupPanel";
@@ -17,7 +19,10 @@ import type {
   ChatMessage,
   FighterInfo,
   GameStatus,
+  GuessFeedback,
   HintsState,
+  LeaderboardEntry,
+  NextUpPair,
   Player,
   PlayerRole,
   RoundClockState,
@@ -53,14 +58,19 @@ interface GameArenaProps {
   showRoundStartedBanner: boolean;
   roundWinner: RoundWinner | null;
   matchWinner: RoundWinner | null;
+  leaderboard: LeaderboardEntry[];
+  nextUp: NextUpPair | null;
+  guessFeedback: GuessFeedback | null;
   onStartDuel: (payload: {
     category: string;
     random?: boolean;
+    sequence?: boolean;
     playerAId?: string;
     playerBId?: string;
   }) => void;
   onStartCustomDuel: (payload: {
     random?: boolean;
+    sequence?: boolean;
     playerAId?: string;
     playerBId?: string;
     mode?: "words" | "numbers";
@@ -73,6 +83,8 @@ interface GameArenaProps {
   onApproveHints: () => void;
   onRejectHints: () => void;
   onRequestPersonalHint: () => void;
+  onRequestPeerHint: () => void;
+  onSendPeerHint: (text: string) => void;
   onSetRoundTimer: (payload: {
     enabled: boolean;
     durationSec?: number;
@@ -114,6 +126,9 @@ export default function GameArena({
   showRoundStartedBanner,
   roundWinner,
   matchWinner,
+  leaderboard,
+  nextUp,
+  guessFeedback,
   onStartDuel,
   onStartCustomDuel,
   onProposeWord,
@@ -124,6 +139,8 @@ export default function GameArena({
   onApproveHints,
   onRejectHints,
   onRequestPersonalHint,
+  onRequestPeerHint,
+  onSendPeerHint,
   onSetRoundTimer,
   onReturnToLobby,
   onSendGuess,
@@ -133,6 +150,7 @@ export default function GameArena({
   onLeaveRoom,
   onOpenHelp,
 }: GameArenaProps) {
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const showWinOverlay =
     (gameStatus === "round_end" || gameStatus === "match_end") && !!roundWinner;
   const canReturnToLobby =
@@ -174,6 +192,15 @@ export default function GameArena({
           </div>
           <div className="flex items-center gap-2">
             <CreditsCredit textClassName="hidden text-[10px] text-slate-500 sm:block sm:text-xs" />
+            <button
+              type="button"
+              onClick={() => setShowLeaderboard(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-100 hover:border-amber-300/50 sm:text-xs"
+              dir="rtl"
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              المتصدرون
+            </button>
             <HelpButton onClick={onOpenHelp} />
           </div>
         </div>
@@ -219,6 +246,8 @@ export default function GameArena({
                   onApprove={onApproveHints}
                   onReject={onRejectHints}
                   onRequestHint={onRequestPersonalHint}
+                  onRequestPeerHint={onRequestPeerHint}
+                  onSendPeerHint={onSendPeerHint}
                 />
                 {isHost && (
                   <HostControls
@@ -229,6 +258,7 @@ export default function GameArena({
                     isGeneratingAI={isGeneratingAI}
                     roundClockEnabled={roundClock.enabled}
                     roundClockDurationSec={roundClock.durationSec}
+                    nextUp={nextUp}
                     onStartDuel={onStartDuel}
                     onStartCustomDuel={onStartCustomDuel}
                     onSkipRound={onSkipRound}
@@ -264,6 +294,7 @@ export default function GameArena({
                 isGeneratingAI={isGeneratingAI}
                 roundClockEnabled={roundClock.enabled}
                 roundClockDurationSec={roundClock.durationSec}
+                nextUp={nextUp}
                 onStartDuel={onStartDuel}
                 onStartCustomDuel={onStartCustomDuel}
                 onSkipRound={onSkipRound}
@@ -289,6 +320,11 @@ export default function GameArena({
               <p className="mt-2 max-w-sm text-sm text-slate-400">
                 المضيف يختار المتبارزين والتصنيف أو كلمة مخصصة.
               </p>
+              {nextUp && (
+                <p className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
+                  الدور القادم: {nextUp.a.username} ضد {nextUp.b.username}
+                </p>
+              )}
             </motion.section>
           )}
 
@@ -331,6 +367,28 @@ export default function GameArena({
             </div>
           )}
 
+          <AnimatePresence>
+            {guessFeedback && (
+              <motion.div
+                initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-4"
+              >
+                <span
+                  className={`rounded-full px-4 py-2 text-sm font-semibold shadow-lg ${
+                    guessFeedback.level === "hot"
+                      ? "bg-rose-500/90 text-white"
+                      : "bg-amber-400/90 text-slate-950"
+                  }`}
+                  dir="rtl"
+                >
+                  {guessFeedback.message}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {showWinOverlay && roundWinner && (
             <WinOverlay
               winnerName={roundWinner.username}
@@ -349,6 +407,14 @@ export default function GameArena({
 
         <CreditsFooter />
       </div>
+
+      <LeaderboardPanel
+        open={showLeaderboard}
+        entries={leaderboard}
+        currentUserId={currentUserId}
+        pointsToWin={pointsToWin}
+        onClose={() => setShowLeaderboard(false)}
+      />
     </div>
   );
 }

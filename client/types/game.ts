@@ -7,12 +7,23 @@ export interface Player {
   userId: string;
   username: string;
   points: number;
+  roundWins?: number;
   isHost: boolean;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  username: string;
+  points: number;
+  roundWins: number;
+  isHost: boolean;
+  online: boolean;
 }
 
 export interface RoomUpdatedPayload {
   roomCode: string;
   players: Player[];
+  leaderboard?: LeaderboardEntry[];
 }
 
 export interface RoomErrorPayload {
@@ -67,6 +78,8 @@ export interface GameStatePayload {
   roundWinner: RoundWinner | null;
   matchWinner: RoundWinner | null;
   players: Player[];
+  leaderboard?: LeaderboardEntry[];
+  nextUp?: NextUpPair | null;
 }
 
 export interface RoundStartedPayload {
@@ -86,19 +99,38 @@ export interface RoundWinnerPayload {
   matchOver: boolean;
 }
 
+export interface HintItem {
+  text: string;
+  source: "ai" | "peer";
+  from?: string | null;
+}
+
 export interface HintsState {
   consentA: boolean;
   consentB: boolean;
   bothConsented: boolean;
   hostApproved: boolean;
   enabled: boolean;
-  myHints: string[];
-  hintsForA: string[];
-  hintsForB: string[];
+  myHints: HintItem[];
+  hintsForA: HintItem[];
+  hintsForB: HintItem[];
   level: number;
   maxRequests: number;
   myRequests: number;
   canRequestHint: boolean;
+  waitingForOpponentHint: boolean;
+  opponentWaitingForMyHint: boolean;
+  opponentName: string | null;
+}
+
+export interface NextUpPair {
+  a: { userId: string; username: string };
+  b: { userId: string; username: string };
+}
+
+export interface GuessFeedback {
+  level: "hot" | "warm";
+  message: string;
 }
 
 export interface RoundClockState {

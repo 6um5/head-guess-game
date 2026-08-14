@@ -19,17 +19,24 @@
  * @property {string | null} word
  * @property {boolean} wordReady
  *
+ * @typedef {Object} HintEntry
+ * @property {string} text
+ * @property {'ai' | 'peer'} source
+ * @property {string | null} [from]
+ *
  * @typedef {Object} HintState
  * @property {boolean} consentA
  * @property {boolean} consentB
  * @property {boolean} hostApproved
  * @property {boolean} enabled
- * @property {string[]} hintsForA
- * @property {string[]} hintsForB
+ * @property {HintEntry[]} hintsForA
+ * @property {HintEntry[]} hintsForB
  * @property {number} level
  * @property {number} requestsA
  * @property {number} requestsB
  * @property {number} maxRequests
+ * @property {boolean} askedA
+ * @property {boolean} askedB
  * @property {ReturnType<typeof setTimeout> | null} timer
  *
  * @typedef {Object} RoundClock
@@ -61,11 +68,15 @@
  * @property {string | null} hostUserId
  * @property {number} lastActivityAt
  * @property {Record<string, RoomMember>} members
+ * @property {string[]} usedWords
+ * @property {Record<string, { duels: number, lastRound: number }>} duelStats
+ * @property {string | null} lastPairKey
  *
  * @typedef {Object} RoomMember
  * @property {string} userId
  * @property {string} username
  * @property {number} points
+ * @property {number} roundWins
  * @property {boolean} isHost
  * @property {number} lastSeen
  */

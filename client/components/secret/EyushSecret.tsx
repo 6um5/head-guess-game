@@ -7,13 +7,58 @@ import { connectSocket } from "@/lib/socket";
 
 const FLOATERS = Array.from({ length: 22 }, (_, index) => index);
 
+const THEMES: Record<
+  string,
+  {
+    label: string;
+    panel: string;
+    ring: string;
+    icon: string;
+    heart: string;
+    spark: string;
+    caption: string;
+  }
+> = {
+  ايوش: {
+    label: "لإيوش فقط",
+    panel:
+      "border-rose-300/30 bg-gradient-to-b from-rose-500/20 via-fuchsia-600/15 to-slate-950/90",
+    ring: "bg-rose-400/20",
+    icon: "fill-rose-300 text-rose-200",
+    heart: "fill-rose-400 text-rose-300",
+    spark: "text-amber-200",
+    caption: "text-rose-200/80",
+  },
+  طوطه: {
+    label: "لطوطه فقط",
+    panel:
+      "border-teal-300/30 bg-gradient-to-b from-teal-500/20 via-violet-600/15 to-slate-950/90",
+    ring: "bg-teal-400/20",
+    icon: "fill-teal-300 text-teal-100",
+    heart: "fill-teal-400 text-teal-300",
+    spark: "text-violet-200",
+    caption: "text-teal-200/80",
+  },
+};
+
+function normalizeKey(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة$/, "ه");
+}
+
 export default function EyushSecret() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [name, setName] = useState<string>("ايوش");
   const [typed, setTyped] = useState("");
+
+  const theme = THEMES[normalizeKey(name)] ?? THEMES["ايوش"];
 
   const particles = useMemo(
     () =>
@@ -50,9 +95,10 @@ export default function EyushSecret() {
   useEffect(() => {
     const socket = connectSocket();
 
-    const onRomance = (payload: { message: string }) => {
+    const onTribute = (payload: { message: string; name?: string }) => {
       setLoading(false);
       setError(null);
+      if (payload.name) setName(payload.name);
       setMessage(payload.message);
       setOpen(false);
       setDraft("");
@@ -63,25 +109,28 @@ export default function EyushSecret() {
       setError(payload.message || "تعذر الآن.");
     };
 
-    socket.on("eyushRomance", onRomance);
-    socket.on("eyushRomanceError", onError);
+    socket.on("secretTribute", onTribute);
+    socket.on("secretTributeError", onError);
 
     return () => {
-      socket.off("eyushRomance", onRomance);
-      socket.off("eyushRomanceError", onError);
+      socket.off("secretTribute", onTribute);
+      socket.off("secretTributeError", onError);
     };
   }, []);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const value = draft.trim().replace(/\s+/g, "");
-    if (value !== "ايوش") {
+    const value = normalizeKey(draft);
+
+    if (!THEMES[value]) {
       setError("...");
       return;
     }
+
+    setName(value);
     setLoading(true);
     setError(null);
-    connectSocket().emit("requestEyushRomance", { key: "ايوش" });
+    connectSocket().emit("requestSecretTribute", { key: value });
   };
 
   return (
@@ -153,7 +202,7 @@ export default function EyushSecret() {
                 animate={{
                   opacity: [0, 1, 1, 0],
                   y: ["0vh", "-110vh"],
-                  x: [0, (particle.id % 2 === 0 ? 18 : -18)],
+                  x: [0, particle.id % 2 === 0 ? 18 : -18],
                   rotate: [0, 40, -20, 10],
                 }}
                 transition={{
@@ -165,12 +214,12 @@ export default function EyushSecret() {
               >
                 {particle.kind === "heart" ? (
                   <Heart
-                    className="fill-rose-400 text-rose-300"
+                    className={theme.heart}
                     style={{ width: particle.size, height: particle.size }}
                   />
                 ) : (
                   <Sparkles
-                    className="text-amber-200"
+                    className={theme.spark}
                     style={{ width: particle.size, height: particle.size }}
                   />
                 )}
@@ -182,7 +231,7 @@ export default function EyushSecret() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12 }}
               transition={{ type: "spring", stiffness: 220, damping: 22 }}
-              className="relative z-10 w-full max-w-md rounded-3xl border border-rose-300/30 bg-gradient-to-b from-rose-500/20 via-fuchsia-600/15 to-slate-950/90 p-6 text-center shadow-2xl sm:p-8"
+              className={`relative z-10 w-full max-w-md rounded-3xl border p-6 text-center shadow-2xl sm:p-8 ${theme.panel}`}
               dir="rtl"
             >
               <button
@@ -197,15 +246,15 @@ export default function EyushSecret() {
               <motion.div
                 animate={{ scale: [1, 1.08, 1] }}
                 transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-400/20"
+                className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${theme.ring}`}
               >
-                <Heart className="h-7 w-7 fill-rose-300 text-rose-200" />
+                <Heart className={`h-7 w-7 ${theme.icon}`} />
               </motion.div>
 
-              <p className="text-[11px] tracking-[0.35em] text-rose-200/80">
-                لإيوش فقط
+              <p className={`text-[11px] tracking-[0.35em] ${theme.caption}`}>
+                {theme.label}
               </p>
-              <p className="mt-4 min-h-[4.5rem] text-base leading-8 text-rose-50 sm:text-lg sm:leading-9">
+              <p className="mt-4 min-h-[4.5rem] text-base leading-8 text-white/95 sm:text-lg sm:leading-9">
                 {typed}
                 <motion.span
                   animate={{ opacity: [0, 1, 0] }}

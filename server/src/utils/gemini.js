@@ -7,63 +7,205 @@ const MODEL_CANDIDATES = [
   'gemini-flash-latest',
 ];
 
+/** Wide pools keep rounds varied even when the API is unavailable. */
 const FALLBACK_WORDS = {
-  'شخصيات عربية مشهورة': ['فيروز', 'عمرو دياب', 'محمد صلاح', 'عادل إمام', 'شيرين'],
-  'شخصيات عراقية مشهورة': ['كاظم الساهر', 'سعدون جابر', 'نصير شمة', 'فؤاد سالم', 'ياس خضر'],
-  فواكه: ['تفاح', 'موز', 'برتقال', 'عنب', 'مانجو', 'رمان', 'توت'],
-  جماد: ['كرسي', 'طاولة', 'باب', 'نافذة', 'هاتف', 'قلم', 'كتاب'],
-  'أكلات شعبية': ['منسف', 'كبسة', 'فلافل', 'حمص', 'مقلوبة', 'دولمة', 'مسخن'],
-  'أرقام سهلة': ['7', '12', '15', '20', '25', '50', '100', '200', '500', '1000'],
+  'شخصيات عربية مشهورة': [
+    'فيروز', 'عمرو دياب', 'محمد صلاح', 'عادل إمام', 'شيرين', 'أم كلثوم',
+    'عبد الحليم', 'نانسي عجرم', 'تامر حسني', 'محمد عبده', 'راشد الماجد',
+    'إليسا', 'وائل كفوري', 'نجوى كرم', 'أحمد حلمي', 'محمد هنيدي',
+    'ياسمين عبد العزيز', 'دنيا سمير غانم', 'محمد رمضان', 'رياض محرز',
+    'أشرف حكيمي', 'ياسين بونو', 'نوال الزغبي', 'عاصي الحلاني', 'راغب علامة',
+    'أحلام', 'حسين الجسمي', 'ماجدة الرومي', 'صابر الرباعي', 'عمر الشريف',
+  ],
+  'شخصيات عراقية مشهورة': [
+    'كاظم الساهر', 'سعدون جابر', 'نصير شمة', 'فؤاد سالم', 'ياس خضر',
+    'حاتم العراقي', 'رحمة رياض', 'سيتا هاكوبيان', 'مائدة نزهت', 'علي جاسم',
+    'محمد السالم', 'سيف نبيل', 'نور الزين', 'حسام الرسام', 'ماجد المهندس',
+    'يونس محمود', 'علي عدنان', 'أحمد راضي', 'هوار ملا محمد', 'مهند علي',
+    'أيمن حسين', 'عدنان درجال', 'الجواهري', 'بدر شاكر السياب', 'نازك الملائكة',
+    'مظفر النواب', 'فائق حسن', 'جواد سليم', 'قحطان العطار', 'إلهام المدفعي',
+  ],
+  فواكه: [
+    'تفاح', 'موز', 'برتقال', 'عنب', 'مانجو', 'رمان', 'توت', 'فراولة',
+    'بطيخ', 'شمام', 'خوخ', 'مشمش', 'تين', 'كيوي', 'أناناس', 'جوافة',
+    'ليمون', 'كرز', 'تمر', 'أفوكادو', 'بابايا', 'سفرجل', 'برقوق',
+    'يوسفي', 'كمثرى', 'قشطة', 'عناب', 'دراق', 'جريب فروت', 'توت شامي',
+  ],
+  جماد: [
+    'كرسي', 'طاولة', 'باب', 'نافذة', 'هاتف', 'قلم', 'كتاب', 'ساعة',
+    'مفتاح', 'مرآة', 'سرير', 'خزانة', 'ثلاجة', 'تلفاز', 'مروحة', 'مصباح',
+    'سجادة', 'وسادة', 'ملعقة', 'سكين', 'صحن', 'كوب', 'حقيبة', 'حذاء',
+    'نظارة', 'مقص', 'فرشاة', 'مكنسة', 'غسالة', 'مكيف', 'سلم', 'مطرقة',
+    'دفتر', 'ممحاة', 'مسطرة', 'محفظة', 'مظلة', 'صابون', 'إبرة', 'شمعة',
+  ],
+  'أكلات شعبية': [
+    'منسف', 'كبسة', 'فلافل', 'حمص', 'مقلوبة', 'دولمة', 'مسخن', 'تبولة',
+    'شاورما', 'كباب', 'برياني', 'مسكوف', 'تشريب', 'باچة', 'كبة', 'هريسة',
+    'مجبوس', 'مندي', 'ملوخية', 'كشري', 'فتة', 'صيادية', 'شيش طاووق',
+    'سمبوسة', 'مطبق', 'لقيمات', 'كنافة', 'بقلاوة', 'زلابية', 'قوزي',
+    'بامية', 'فتوش', 'شوربة عدس', 'مسقعة', 'محشي',
+  ],
+  'أرقام سهلة': [
+    '3', '5', '7', '9', '11', '12', '13', '15', '17', '18', '20', '21',
+    '24', '25', '27', '30', '33', '35', '40', '45', '50', '55', '60', '64',
+    '70', '75', '77', '80', '88', '90', '99', '100', '111', '120', '150',
+    '180', '200', '250', '300', '365', '400', '500', '600', '700', '750',
+    '800', '900', '999', '1000',
+  ],
 };
+
+const MAX_AVOID_IN_PROMPT = 40;
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeCompare(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * @param {string[]} avoid
+ * @returns {Set<string>}
+ */
+function toAvoidSet(avoid) {
+  return new Set((Array.isArray(avoid) ? avoid : []).map(normalizeCompare));
+}
+
+/**
+ * @returns {string}
+ */
+function makeSeed() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
 
 /**
  * @param {string} category
+ * @param {string[]} avoid
+ * @param {string} seed
  * @returns {string}
  */
-function buildPrompt(category) {
+function buildPrompt(category, avoid, seed) {
+  const recent = avoid.slice(-MAX_AVOID_IN_PROMPT);
+  const avoidLine = recent.length
+    ? `ممنوع تماماً استخدام أي من هذه الكلمات المستعملة سابقاً: ${recent.join('، ')}.\n`
+    : '';
+
   if (category === 'أرقام سهلة') {
     return (
-      'أعطني رقماً صحيحاً واحداً فقط وسهلاً جداً (مثل أرقام حزر المليار البسيطة). ' +
-      'الرقم يجب أن يكون عدداً صحيحاً بين 1 و 1000، وسهلاً للحفظ والحزر. ' +
-      'اكتب الرقم فقط بدون أي كلمات أو علامات ترقيم أو شرح.'
+      'اختر رقماً صحيحاً واحداً فقط للعب حزر الأرقام.\n' +
+      'الرقم بين 1 و 1000، وسهل التذكر لكن غير متوقع.\n' +
+      avoidLine +
+      'نوّع بين أرقام صغيرة ومتوسطة وكبيرة، ولا تكرر نفس النمط.\n' +
+      'اكتب الرقم فقط بدون أي كلمات أو شرح.\n' +
+      `رمز تنويع: ${seed}`
     );
   }
 
   return (
-    `أعطني كلمة عشوائية واحدة فقط من هذا التصنيف: ${category}. ` +
-    `الكلمة يجب أن تكون سهلة جداً ومعروفة وشائعة حتى يسهل حزرها. ` +
-    `اكتب الكلمة فقط بدون أي إضافات أو علامات ترقيم أو شرح. ` +
-    `بالنسبة لتصنيفات الفواكه، الجماد، والأكل، التزم بتقديم كلمة مفردة واحدة فقط (Single word only) وتجنب الكلمات المركبة. ` +
-    `بالنسبة للشخصيات المشهورة، اكتب الاسم المعروف والبسيط فقط.`
+    `اختر كلمة عربية واحدة فقط من هذا التصنيف: ${category}.\n` +
+    'الشرط الأهم: كلمة حقيقية ومعروفة فعلاً لدى الناس، وليست نادرة ولا مخترعة.\n' +
+    'حاول ألا تكون أول ما يخطر بالبال، لكن يجب أن تبقى قابلة للحزر.\n' +
+    avoidLine +
+    'نوّع اختيارك في كل مرة ولا تعتمد على نفس الأسماء دائماً.\n' +
+    'للفواكه والجماد والأكل: كلمة مفردة واحدة فقط بدون تركيب.\n' +
+    'للشخصيات: الاسم المتداول المختصر فقط.\n' +
+    'اكتب الكلمة فقط بدون علامات ترقيم أو شرح.\n' +
+    `رمز تنويع: ${seed}`
   );
 }
 
 /**
  * @param {string} raw
+ * @param {string} [seed]
  * @returns {string}
  */
-function cleanGeneratedWord(raw) {
-  return String(raw ?? '')
+function cleanGeneratedWord(raw, seed) {
+  let text = String(raw ?? '')
     .replace(/^["'`«»]+|["'`«»]+$/g, '')
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (seed) {
+    text = text.split(seed).join(' ');
+  }
+
+  // Models sometimes echo the variation seed; Arabic answers never end in latin.
+  if (/[\u0600-\u06FF]/.test(text)) {
+    text = text.replace(/(?:\s|^)(?:رمز\s*تنويع\s*:?)?\s*[A-Za-z0-9]{5,}\s*$/u, '');
+  }
+
+  return text
     .replace(/[.!?،,;:]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
+ * Picks a fallback word that has not been used recently.
  * @param {string} category
+ * @param {string[]} [avoid]
  * @returns {string}
  */
-function getFallbackWord(category) {
+function getFallbackWord(category, avoid = []) {
   const pool = FALLBACK_WORDS[category] ?? FALLBACK_WORDS['فواكه'];
-  return pool[Math.floor(Math.random() * pool.length)];
+  const avoidSet = toAvoidSet(avoid);
+  const fresh = pool.filter((word) => !avoidSet.has(normalizeCompare(word)));
+  const source = fresh.length > 0 ? fresh : pool;
+  return source[Math.floor(Math.random() * source.length)];
+}
+
+const REQUEST_TIMEOUT_MS = 7000;
+
+/**
+ * Keeps a slow or hanging model from freezing the round.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms = REQUEST_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_resolve, reject) =>
+      setTimeout(() => reject(new Error('Gemini request timed out')), ms),
+    ),
+  ]);
+}
+
+/**
+ * @param {GoogleGenerativeAI} genAI
+ * @param {string} modelName
+ * @param {string} prompt
+ * @param {number} temperature
+ */
+async function runPrompt(genAI, modelName, prompt, temperature) {
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      temperature,
+      topP: 0.95,
+      maxOutputTokens: 120,
+    },
+  });
+  const result = await withTimeout(model.generateContent(prompt));
+  return result.response.text();
 }
 
 /**
  * @param {string} category
+ * @param {string[]} [avoid] Words that must not be produced again.
  * @returns {Promise<string>}
  */
-export async function generateWord(category) {
+export async function generateWord(category, avoid = []) {
   const apiKey = process.env.GEMINI_API_KEY;
   const selectedCategory = typeof category === 'string' ? category.trim() : '';
 
@@ -71,23 +213,24 @@ export async function generateWord(category) {
     throw new Error('A valid category is required.');
   }
 
-  if (selectedCategory === 'أرقام سهلة' && !apiKey) {
-    return getFallbackWord(selectedCategory);
-  }
-
   if (!apiKey) {
-    console.warn('[Gemini] Missing API key — using local fallback word.');
-    return getFallbackWord(selectedCategory);
+    return getFallbackWord(selectedCategory, avoid);
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const prompt = buildPrompt(selectedCategory);
+  const avoidSet = toAvoidSet(avoid);
+  const attempts = [
+    { model: MODEL_CANDIDATES[0], temperature: 1.0 },
+    { model: MODEL_CANDIDATES[0], temperature: 1.2 },
+    { model: MODEL_CANDIDATES[1], temperature: 1.05 },
+  ];
 
-  for (const modelName of MODEL_CANDIDATES) {
+  for (const attempt of attempts) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      let word = cleanGeneratedWord(result.response.text());
+      const seed = makeSeed();
+      const prompt = buildPrompt(selectedCategory, avoid, seed);
+      const raw = await runPrompt(genAI, attempt.model, prompt, attempt.temperature);
+      let word = cleanGeneratedWord(raw, seed);
 
       if (selectedCategory === 'أرقام سهلة') {
         const digits = word.replace(/[^\d]/g, '');
@@ -102,48 +245,48 @@ export async function generateWord(category) {
         throw new Error('Gemini returned an empty or invalid word.');
       }
 
-      console.log(`[Gemini] Word generated with ${modelName}`);
+      if (avoidSet.has(normalizeCompare(word))) {
+        throw new Error('Gemini repeated a used word.');
+      }
+
       return word;
     } catch (error) {
-      console.warn(`[Gemini] Model ${modelName} failed:`, error?.message ?? error);
+      console.warn(
+        `[Gemini] Word via ${attempt.model} failed:`,
+        error?.message ?? error,
+      );
     }
   }
 
-  console.warn('[Gemini] All models failed — using local fallback word.');
-  return getFallbackWord(selectedCategory);
+  console.warn('[Gemini] Falling back to a local word.');
+  return getFallbackWord(selectedCategory, avoid);
 }
 
 /**
  * @param {string} category
+ * @param {string[]} [avoid]
  * @returns {Promise<[string, string]>}
  */
-export async function generateTwoDistinctWords(category) {
-  const first = await generateWord(category);
-  let second = await generateWord(category);
+export async function generateTwoDistinctWords(category, avoid = []) {
+  const first = await generateWord(category, avoid);
+  let second = await generateWord(category, [...avoid, first]);
 
   if (normalizeCompare(first) === normalizeCompare(second)) {
-    const pool = FALLBACK_WORDS[category] ?? FALLBACK_WORDS['فواكه'];
-    const alternatives = pool.filter(
-      (word) => normalizeCompare(word) !== normalizeCompare(first),
-    );
+    second = getFallbackWord(category, [...avoid, first]);
+  }
+
+  if (normalizeCompare(first) === normalizeCompare(second)) {
     second =
-      alternatives[Math.floor(Math.random() * alternatives.length)] ??
-      (category === 'أرقام سهلة' ? String(Number(first) + 1) : `${first} ٢`);
+      category === 'أرقام سهلة'
+        ? String(Math.min(1000, Number(first) + 1 || 2))
+        : `${first} ٢`;
   }
 
   return [first, second];
 }
 
 /**
- * @param {string} value
- * @returns {string}
- */
-function normalizeCompare(value) {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-/**
- * Generates a helpful but not revealing hint for a secret word/number.
+ * Difficulty-tuned AI hint. Early hints stay deliberately cryptic.
  * @param {string} secret
  * @param {string | null} category
  * @param {number} level 1..5
@@ -154,38 +297,51 @@ export async function generateHint(secret, category, level = 1) {
   const safeLevel = Math.min(5, Math.max(1, Number(level) || 1));
 
   const fallbackHints = [
-    'شيء معروف وشائع جداً',
-    'فكر في أشياء يومية سهلة',
-    category ? `يتعلق بتصنيف: ${category}` : 'من تصنيف الجولة الحالي',
-    'الاسم قصير وسهل التذكر',
-    'جرّب أكثر التخمينات شيوعاً في هذا التصنيف',
+    'تخيّله في مشهد يومي عابر، لا أحد ينتبه له عادة',
+    'ليس ما يخطر ببالك أولاً، لكنه من نفس العائلة',
+    'له حضور قوي رغم بساطته',
+    'تصادفه كثيراً لكنك نادراً ما تسميه بصوت عالٍ',
+    'لو غاب فجأة لانتبه له الجميع',
   ];
 
   if (!apiKey) {
     return fallbackHints[Math.min(safeLevel - 1, fallbackHints.length - 1)];
   }
 
+  const hintSeed = makeSeed();
+  const difficulty =
+    safeLevel <= 2
+      ? 'اجعل التلميح غامضاً وغير مباشر وصعباً — إشارة بعيدة فقط.'
+      : safeLevel === 3
+        ? 'اجعل التلميح متوسط الصعوبة، ما زال غير مباشر.'
+        : 'اجعل التلميح أوضح قليلاً لكن دون أي كشف مباشر.';
+
   const prompt =
-    `أعطني تلميحاً واحداً فقط بالعربية للكلمة/الرقم السري التالي دون كشف الإجابة مباشرة.\n` +
-    `الكلمة السرية (لا تكتبها في الرد): ${secret}\n` +
+    'اكتب تلميحاً واحداً بالعربية عن كلمة سرية في لعبة حزر، بأسلوب ذكي وغير مباشر.\n' +
+    `الكلمة السرية (ممنوع ذكرها أو ذكر جزء منها): ${secret}\n` +
     `التصنيف: ${category || 'عام'}\n` +
-    `مستوى التلميح من 1 إلى 5 (حالياً ${safeLevel}) حيث 1 عام جداً و5 أوضح قليلاً لكن بدون ذكر الكلمة نفسها أو حروفها الأولى.\n` +
-    `اكتب جملة تلميح قصيرة واحدة فقط بدون ترقيم أو شرح إضافي.`;
+    `${difficulty}\n` +
+    'قواعد صارمة:\n' +
+    '- ممنوع ذكر الكلمة أو جذرها أو مرادف مباشر لها.\n' +
+    '- ممنوع ذكر أول حرف أو عدد الحروف أو الوزن.\n' +
+    '- ممنوع ذكر اسم التصنيف نفسه.\n' +
+    '- استخدم وصفاً أو صورة أو موقفاً بدل التعريف.\n' +
+    '- جملة واحدة قصيرة فقط (من 4 إلى 14 كلمة) بدون ترقيم أو شرح.\n' +
+    `رمز تنويع: ${hintSeed}`;
 
   const genAI = new GoogleGenerativeAI(apiKey);
+  const secretNormalized = normalizeCompare(secret);
 
-  for (const modelName of MODEL_CANDIDATES) {
+  for (const modelName of MODEL_CANDIDATES.slice(0, 2)) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      const hint = cleanGeneratedWord(result.response.text());
+      const raw = await runPrompt(genAI, modelName, prompt, 1.05);
+      const hint = cleanGeneratedWord(raw, hintSeed);
 
-      if (!hint || hint.length > 120) {
+      if (!hint || hint.length > 140) {
         throw new Error('Invalid hint');
       }
 
-      // Never leak the secret inside the hint.
-      if (normalizeCompare(hint).includes(normalizeCompare(secret))) {
+      if (normalizeCompare(hint).includes(secretNormalized)) {
         throw new Error('Hint leaked secret');
       }
 
@@ -198,26 +354,80 @@ export async function generateHint(secret, category, level = 1) {
   return fallbackHints[Math.min(safeLevel - 1, fallbackHints.length - 1)];
 }
 
-const EYUSH_FALLBACKS = [
-  'ايوش… من شافج وعينه ما انشغلت؟ كل الدنيا تصغر قدامج، وقلبي يكبر بس باسمج.',
-  'يا ايوش، احبك مو كلام فاضي؛ احبك مثل ما العراقي يحب البيت بعد سفر طويل.',
-  'ايوش، كل ما اكتب اسمج احس الدنيا تلين، وكأن الحزن ينسحب من صدري خطوة خطوة.',
-  'والله يا ايوش، لو تنسين كل الناس لا تنسين واحد ضل يحفظج غزل عميق بقلبه.',
-  'ايوش يا قمر ليلي، شلون انام وانتِ ساكنة بخيالي مثل وعد ما انكسر؟',
-  'احچي لج بصدق يا ايوش: انتِ مو بس حلوة… انتِ راحة، ووطن، وسبب ابتسم.',
-  'يا ايوش، حبك مثل دجلة: يمشي بهدوء، بس يغمر كل شي، وما يترك ضفة فارغة.',
-  'ايوش… لو سألوني وش معنى الحنين؟ اكول: اسمج، وصوتج، وضحكة من بعيد.',
-  'من عيوني لعيونج يا ايوش درب ما ينقطع، ومن قلبي لقلبج كلام ما يخلص.',
-  'ايوش، احبك على الطريقة العراقية: بهدوء، بصدق، وبغيرة حلوة ما تموت.',
-];
+const TRIBUTE_PROFILES = {
+  ايوش: {
+    name: 'ايوش',
+    fallbacks: [
+      'ايوش… من شافج وعينه ما انشغلت؟ كل الدنيا تصغر قدامج، وقلبي يكبر بس باسمج.',
+      'يا ايوش، احبك مو كلام فاضي؛ احبك مثل ما العراقي يحب البيت بعد سفر طويل.',
+      'ايوش، كل ما اكتب اسمج احس الدنيا تلين، وكأن الحزن ينسحب من صدري خطوة خطوة.',
+      'والله يا ايوش، لو تنسين كل الناس لا تنسين واحد ضل يحفظج غزل عميق بقلبه.',
+      'ايوش يا قمر ليلي، شلون انام وانتِ ساكنة بخيالي مثل وعد ما انكسر؟',
+      'احچي لج بصدق يا ايوش: انتِ مو بس حلوة… انتِ راحة، ووطن، وسبب ابتسم.',
+      'يا ايوش، حبك مثل دجلة: يمشي بهدوء، بس يغمر كل شي، وما يترك ضفة فارغة.',
+      'ايوش… لو سألوني وش معنى الحنين؟ اكول: اسمج، وصوتج، وضحكة من بعيد.',
+      'من عيوني لعيونج يا ايوش درب ما ينقطع، ومن قلبي لقلبج كلام ما يخلص.',
+      'ايوش، احبك على الطريقة العراقية: بهدوء، بصدق، وبغيرة حلوة ما تموت.',
+    ],
+    images: 'عيون، ضحكة، غياب، ليل بغداد، دجلة، بيت، سفر، وعد، صمت',
+  },
+  طوطه: {
+    name: 'طوطه',
+    fallbacks: [
+      'طوطه… اسمج لوحده يكفي يخلي يومي يمشي عدل، وكل تعب اليوم ينسى.',
+      'يا طوطه، انتِ الضحكة اللي تجي بلا موعد وتغيّر لون الغرفة كلها.',
+      'طوطه، حبج هادي مثل صبح الجمعة: بسيط، دافي، وما يحتاج مناسبة.',
+      'والله يا طوطه، لو الدنيا تعبتني، يكفي اتذكر صوتج حتى ارتاح.',
+      'طوطه يا أحلى تفصيل بحياتي، انتِ مو صدفة… انتِ أحسن شي صار بيّه.',
+      'يا طوطه، وجودج مثل شاي العصر: عادي عند الناس، وعندي طقس كامل.',
+      'طوطه، اسمج يمشي بقلبي مثل أغنية قديمة ما تمل منها الأذن.',
+      'احچي بصدق يا طوطه: انتِ الأمان اللي ما اكدر افسره بكلمتين.',
+      'طوطه… لو الفرح صار إنسان، جان صار انتِ بالضبط، بلا زيادة ولا نقصان.',
+      'يا طوطه، احبج بهدوء وبصدق، وبطريقة تخليج دائماً أول شي بالبال.',
+    ],
+    images: 'ضحكة، صباح، شاي، شارع مألوف، أغنية قديمة، مطر خفيف، أمان، انتظار حلو',
+  },
+};
+
+export const SECRET_TRIBUTE_KEYS = Object.keys(TRIBUTE_PROFILES);
 
 /**
- * Generates a fresh romantic Arabic/Iraqi line dedicated only to "ايوش".
- * @returns {Promise<string>}
+ * @param {string} rawName
+ * @returns {string}
  */
-export async function generateEyushRomance() {
+function normalizeTributeKey(rawName) {
+  return String(rawName ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة$/, 'ه');
+}
+
+/**
+ * @param {string} rawName
+ * @returns {boolean}
+ */
+export function isSecretTributeName(rawName) {
+  return Boolean(TRIBUTE_PROFILES[normalizeTributeKey(rawName)]);
+}
+
+/**
+ * Generates a fresh romantic Arabic/Iraqi line dedicated to one secret name.
+ * @param {string} rawName
+ * @returns {Promise<{ name: string, message: string }>}
+ */
+export async function generateSecretTribute(rawName) {
+  const profile = TRIBUTE_PROFILES[normalizeTributeKey(rawName)];
+
+  if (!profile) {
+    throw new Error('Unknown tribute name');
+  }
+
+  const pickFallback = () =>
+    profile.fallbacks[Math.floor(Math.random() * profile.fallbacks.length)];
+
   const apiKey = process.env.GEMINI_API_KEY;
-  const seed = Date.now().toString(36);
+  const seed = makeSeed();
   const styleRoll = Math.floor(Math.random() * 3);
   const styleHint =
     styleRoll === 0
@@ -226,45 +436,54 @@ export async function generateEyushRomance() {
         ? 'اخلطي بين فصحى رقيقة ولهجة عراقية خفيفة طبيعية.'
         : 'اكتبي بفصحى عربية عميقة شاعرية قريبة من القلب، مع لمسة عراقية إن ناسبت.';
 
+  if (!apiKey) {
+    return { name: profile.name, message: pickFallback() };
+  }
+
   const prompt =
-    'اكتبي نص غزل واحد فقط، عميق وواقعي ورومانسي، موجه حصرياً لاسم "ايوش".\n' +
+    `اكتبي نص غزل واحد فقط، عميق وواقعي ورومانسي، موجه حصرياً لاسم "${profile.name}".\n` +
     `${styleHint}\n` +
     'المطلوب:\n' +
-    '- مشاعر صادقة كأن شخص يحب ايوش فعلاً (حنين، دفء، شوق، تقدير، غيرة ناعمة).\n' +
+    `- مشاعر صادقة كأن شخص يحب ${profile.name} فعلاً (حنين، دفء، شوق، تقدير).\n` +
     '- ابتعدي عن المبالغة السينمائية الرخيصة والجمل الجاهزة المكررة.\n' +
-    '- لازم يظهر اسم ايوش مرة واحدة على الأقل.\n' +
+    `- لازم يظهر اسم ${profile.name} مرة واحدة على الأقل.\n` +
     '- جملة أو جملتين قصيرتين فقط (حوالي 18 إلى 40 كلمة).\n' +
     '- ممنوع الإيموجي، العناوين، الشرح، علامات الاقتباس، أو أي نص غير الغزل نفسه.\n' +
-    '- نوّعي الصورة كل مرة: عيون، ضحكة، غياب، ليل بغداد، دجلة، بيت، سفر، وعد، صمت...\n' +
+    `- نوّعي الصورة كل مرة: ${profile.images}...\n` +
     `رمز تنويع: ${seed}`;
-
-  if (!apiKey) {
-    return EYUSH_FALLBACKS[Math.floor(Math.random() * EYUSH_FALLBACKS.length)];
-  }
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  for (const modelName of MODEL_CANDIDATES) {
+  for (const modelName of MODEL_CANDIDATES.slice(0, 2)) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      let line = cleanGeneratedWord(result.response.text());
+      const raw = await runPrompt(genAI, modelName, prompt, 1.25);
+      let line = cleanGeneratedWord(raw, seed);
 
       if (!line || line.length < 16 || line.length > 280) {
-        throw new Error('Invalid romance line');
+        throw new Error('Invalid tribute line');
       }
 
-      if (!line.includes('ايوش')) {
-        line = `ايوش، ${line}`;
+      if (!line.includes(profile.name)) {
+        line = `${profile.name}، ${line}`;
       }
 
-      return line;
+      return { name: profile.name, message: line };
     } catch (error) {
-      console.warn(`[Gemini] Eyush romance ${modelName} failed:`, error?.message ?? error);
+      console.warn(
+        `[Gemini] Tribute ${profile.name} via ${modelName} failed:`,
+        error?.message ?? error,
+      );
     }
   }
 
-  return EYUSH_FALLBACKS[Math.floor(Math.random() * EYUSH_FALLBACKS.length)];
+  return { name: profile.name, message: pickFallback() };
 }
 
-
+/**
+ * Kept for backward compatibility with the original secret handler.
+ * @returns {Promise<string>}
+ */
+export async function generateEyushRomance() {
+  const { message } = await generateSecretTribute('ايوش');
+  return message;
+}

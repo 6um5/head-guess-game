@@ -1,31 +1,48 @@
-import { generateEyushRomance } from '../utils/gemini.js';
+import {
+  generateSecretTribute,
+  isSecretTributeName,
+} from '../utils/gemini.js';
 
 /**
- * Secret romantic tribute handler — not advertised in the UI docs.
+ * Secret tribute handlers — not advertised in the UI docs.
  * @param {import('socket.io').Server} io
  * @param {import('socket.io').Socket} socket
  */
 export function registerSecretHandlers(_io, socket) {
+  /**
+   * @param {string} rawKey
+   * @param {string} successEvent
+   * @param {string} errorEvent
+   */
+  async function respondWithTribute(rawKey, successEvent, errorEvent) {
+    const normalized = String(rawKey ?? '')
+      .trim()
+      .replace(/\s+/g, '');
+
+    if (!isSecretTributeName(normalized)) {
+      socket.emit(errorEvent, { message: 'غير مسموح.' });
+      return;
+    }
+
+    const { name, message } = await generateSecretTribute(normalized);
+    socket.emit(successEvent, { name, message });
+  }
+
+  socket.on('requestSecretTribute', async ({ key } = {}) => {
+    try {
+      await respondWithTribute(key, 'secretTribute', 'secretTributeError');
+    } catch (error) {
+      console.error('requestSecretTribute failed:', error);
+      socket.emit('secretTributeError', { message: 'تعذر إكمال اللحظة الآن.' });
+    }
+  });
+
   socket.on('requestEyushRomance', async ({ key } = {}) => {
     try {
-      const normalized = String(key ?? '')
-        .trim()
-        .replace(/\s+/g, '');
-
-      if (normalized !== 'ايوش') {
-        socket.emit('eyushRomanceError', {
-          message: 'غير مسموح.',
-        });
-        return;
-      }
-
-      const message = await generateEyushRomance();
-      socket.emit('eyushRomance', { message });
+      await respondWithTribute(key, 'eyushRomance', 'eyushRomanceError');
     } catch (error) {
       console.error('requestEyushRomance failed:', error);
-      socket.emit('eyushRomanceError', {
-        message: 'تعذر إكمال اللحظة الآن.',
-      });
+      socket.emit('eyushRomanceError', { message: 'تعذر إكمال اللحظة الآن.' });
     }
   });
 }
