@@ -228,8 +228,14 @@ export function sanitizeSecretWord(word, options = {}) {
   return trimmed;
 }
 
+/** Only a stray definite article is dropped; name parts stay meaningful. */
+const IGNORED_GUESS_WORDS = new Set(['ال']);
+
 /**
- * Arabic-friendly normalisation so hamza/ta-marbuta spelling never blocks a win.
+ * Arabic-friendly normalisation: hamza, ta-marbuta, alef-maqsura, tatweel,
+ * Arabic-Indic digits, and common Persian/Iraqi letter shapes all collapse
+ * to one spelling so a correct answer is never rejected over orthography.
+ *
  * @param {string} value
  * @returns {string}
  */
@@ -237,14 +243,57 @@ function normalizeForCompare(value) {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/[ًٌٍَُِّْـ]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
+    .replace(/[\u0660-\u0669]/g, (digit) =>
+      String(digit.charCodeAt(0) - 0x0660),
+    )
+    .replace(/[\u06F0-\u06F9]/g, (digit) =>
+      String(digit.charCodeAt(0) - 0x06f0),
+    )
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱٲٳ]/g, 'ا')
+    .replace(/[ىئیۍ]/g, 'ي')
     .replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/[^\p{L}\p{N} ]/gu, '')
-    .replace(/\s+/g, ' ');
+    .replace(/[ةۃ]/g, 'ه')
+    .replace(/[ھہۀ]/g, 'ه')
+    .replace(/[کڪڬ]/g, 'ك')
+    .replace(/[گڲ]/g, 'ك')
+    .replace(/چ/g, 'ج')
+    .replace(/پ/g, 'ب')
+    .replace(/[ڤﭪ]/g, 'ف')
+    .replace(/ژ/g, 'ز')
+    .replace(/ء/g, '')
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Spacing-free forms of an answer, with and without the definite article,
+ * so "الرمان"/"رمان" and "عمرو دياب"/"عمرودياب" all compare equal.
+ *
+ * @param {string} value
+ * @returns {string[]}
+ */
+function compareForms(value) {
+  const words = normalizeForCompare(value)
+    .split(' ')
+    .filter((word) => word && !IGNORED_GUESS_WORDS.has(word));
+
+  const plain = words.join('');
+  const withoutArticle = words
+    .map((word) => (word.length > 3 && word.startsWith('ال') ? word.slice(2) : word))
+    .join('');
+
+  return plain === withoutArticle ? [plain] : [plain, withoutArticle];
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function compactForCompare(value) {
+  const forms = compareForms(value);
+  return forms[forms.length - 1] ?? '';
 }
 
 /**
@@ -253,16 +302,52 @@ function normalizeForCompare(value) {
  * @returns {boolean}
  */
 export function isCorrectGuess(guess, secretWord) {
-  const normalizedGuess = normalizeForCompare(guess);
-  const normalizedSecret = normalizeForCompare(secretWord);
+  const guessForms = compareForms(guess);
+  const secretForms = compareForms(secretWord);
+  const normalizedGuess = compactForCompare(guess);
+  const normalizedSecret = compactForCompare(secretWord);
 
   if (!normalizedGuess || !normalizedSecret) {
     return false;
   }
 
-  return (
-    normalizedGuess === normalizedSecret ||
-    normalizedGuess.replace(/^ال/, '') === normalizedSecret.replace(/^ال/, '')
+  if (guessForms.some((form) => secretForms.includes(form))) {
+    return true;
+  }
+
+  // Numbers must match exactly — a single digit changes the answer.
+  if (/\d/.test(normalizedSecret) || /\d/.test(normalizedGuess)) {
+    return false;
+  }
+
+  // Forgive one mistyped letter in longer answers, but never a missing
+  // or extra letter, so a genuinely different word is still rejected.
+  if (
+    normalizedSecret.length >= 6 &&
+    normalizedGuess.length === normalizedSecret.length
+  ) {
+    return editDistance(normalizedGuess, normalizedSecret) <= 1;
+  }
+
+  return false;
+}
+
+/**
+ * True when a piece of text gives away the secret, ignoring spelling.
+ * @param {string} text
+ * @param {string} secretWord
+ * @returns {boolean}
+ */
+export function revealsSecret(text, secretWord) {
+  const textForms = compareForms(text);
+  const secretForms = compareForms(secretWord);
+
+  if (!textForms[0] || !secretForms[0] || secretForms[0].length < 2) {
+    return false;
+  }
+
+  return secretForms.some((secret) =>
+    textForms.some((form) => form.includes(secret)),
   );
 }
 
@@ -301,8 +386,8 @@ function editDistance(a, b) {
  * @returns {{ level: 'hot' | 'warm', message: string } | null}
  */
 export function measureGuessCloseness(guess, secretWord) {
-  const normalizedGuess = normalizeForCompare(guess);
-  const normalizedSecret = normalizeForCompare(secretWord);
+  const normalizedGuess = compactForCompare(guess);
+  const normalizedSecret = compactForCompare(secretWord);
 
   if (!normalizedGuess || !normalizedSecret || normalizedSecret.length < 3) {
     return null;

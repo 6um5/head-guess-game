@@ -27,6 +27,7 @@ import {
   isCorrectGuess,
   isHost,
   measureGuessCloseness,
+  revealsSecret,
   sanitizeGuess,
   sanitizePointsToWin,
   sanitizeSecretWord,
@@ -909,15 +910,7 @@ export function registerGameHandlers(io, socket) {
       // The writer owns the secret their opponent is trying to guess.
       const mySecret = isA ? room.fighterA?.word : room.fighterB?.word;
 
-      if (mySecret && isCorrectGuess(hintText, mySecret)) {
-        emitGameError(socket, 'التلميح لا يجوز أن يكون الكلمة نفسها.');
-        return;
-      }
-
-      if (
-        mySecret &&
-        hintText.toLowerCase().includes(String(mySecret).toLowerCase())
-      ) {
+      if (mySecret && revealsSecret(hintText, mySecret)) {
         emitGameError(socket, 'التلميح يكشف كلمتك — اكتب تلميحاً غير مباشر.');
         return;
       }
