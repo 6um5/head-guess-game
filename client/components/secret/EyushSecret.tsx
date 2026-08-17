@@ -39,6 +39,22 @@ const THEMES: Record<
     spark: "text-violet-200",
     caption: "text-teal-200/80",
   },
+  ميميالبزونه: {
+    label: "لميمي البزونة فقط",
+    panel:
+      "border-orange-300/30 bg-gradient-to-b from-orange-500/25 via-red-600/15 to-slate-950/90",
+    ring: "bg-orange-400/20",
+    icon: "fill-orange-300 text-orange-100",
+    heart: "fill-orange-500 text-orange-400",
+    spark: "text-amber-200",
+    caption: "text-orange-200/80",
+  },
+};
+
+/** Short nicknames open the same tribute. */
+const KEY_ALIASES: Record<string, string> = {
+  ميمي: "ميميالبزونه",
+  البزونه: "ميميالبزونه",
 };
 
 function normalizeKey(value: string): string {
@@ -47,6 +63,12 @@ function normalizeKey(value: string): string {
     .replace(/\s+/g, "")
     .replace(/[أإآ]/g, "ا")
     .replace(/ة$/, "ه");
+}
+
+function resolveKey(value: string): string | null {
+  const normalized = normalizeKey(value);
+  const resolved = KEY_ALIASES[normalized] ?? normalized;
+  return THEMES[resolved] ? resolved : null;
 }
 
 export default function EyushSecret() {
@@ -58,7 +80,7 @@ export default function EyushSecret() {
   const [name, setName] = useState<string>("ايوش");
   const [typed, setTyped] = useState("");
 
-  const theme = THEMES[normalizeKey(name)] ?? THEMES["ايوش"];
+  const theme = THEMES[resolveKey(name) ?? "ايوش"] ?? THEMES["ايوش"];
 
   const particles = useMemo(
     () =>
@@ -120,9 +142,9 @@ export default function EyushSecret() {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const value = normalizeKey(draft);
+    const value = resolveKey(draft);
 
-    if (!THEMES[value]) {
+    if (!value) {
       setError("...");
       return;
     }
@@ -130,7 +152,7 @@ export default function EyushSecret() {
     setName(value);
     setLoading(true);
     setError(null);
-    connectSocket().emit("requestSecretTribute", { key: value });
+    connectSocket().emit("requestSecretTribute", { key: draft.trim() });
   };
 
   return (

@@ -387,6 +387,29 @@ const TRIBUTE_PROFILES = {
     ],
     images: 'ضحكة، صباح، شاي، شارع مألوف، أغنية قديمة، مطر خفيف، أمان، انتظار حلو',
   },
+  ميميالبزونه: {
+    name: 'ميمي البزونة',
+    mention: 'ميمي',
+    aliases: ['ميمي', 'ميمي البزونة', 'ميمي البزونه', 'البزونه', 'البزونة'],
+    context:
+      'ميمي بزونة (قطة) محبوبة بشعر أحمر، ولها دلال وكبرياء ودفء خاص.',
+    extra:
+      '- لازم تغزلين بشعرها الأحمر بلمسة خفيفة وذكية في كل نص، بدون تكرار نفس الوصف.',
+    fallbacks: [
+      'ميمي، شعرج الأحمر هذا مو لون… هذا نار هادية تدفّي البيت كله وما تحرق أحد.',
+      'يا ميمي، بزونة بس بعيونج كبرياء ملكة، وشعرج الأحمر يمشي قبلج بخطوتين.',
+      'ميمي، من تمرين بالغرفة يصير الضوء أحمر شوية، وكل تعب اليوم ينسى.',
+      'والله يا ميمي، دلعج مو طبيعي؛ شعرج الأحمر يحچي دلال قبل لا تموين.',
+      'ميمي البزونة، انتِ الوحيدة اللي تنامين بالشمس وتصحين وكل البيت بمزاج زين.',
+      'يا ميمي، لو شعرج الأحمر ينباع، جان الخريف كله اشتراه وما كفاه.',
+      'ميمي، احبج بهدوء، مثل ما تحبين الزاوية الدافية عند الشباك.',
+      'من عيونج يا ميمي، ومن شعرج النارنجي، تعلمت إن الجمال ما يحتاج يصيح.',
+      'ميمي، تمشين مثل ما يمشي الغرور… بس أول ما تدللين، ننسى كل شي.',
+      'يا ميمي، الأحمر ما كان لوني المفضل… صار لوني من شفت شعرج.',
+    ],
+    images:
+      'شعر أحمر، شمس الظهر، زاوية دافية عند الشباك، مواء ناعم، دلع، نوم هادئ، خيط صوف، خطوة خفيفة',
+  },
 };
 
 export const SECRET_TRIBUTE_KEYS = Object.keys(TRIBUTE_PROFILES);
@@ -403,12 +426,31 @@ function normalizeTributeKey(rawName) {
     .replace(/ة$/, 'ه');
 }
 
+/** Short nicknames resolve to the same tribute profile. */
+const TRIBUTE_ALIASES = new Map();
+
+for (const [key, profile] of Object.entries(TRIBUTE_PROFILES)) {
+  TRIBUTE_ALIASES.set(key, key);
+  for (const alias of profile.aliases ?? []) {
+    TRIBUTE_ALIASES.set(normalizeTributeKey(alias), key);
+  }
+}
+
+/**
+ * @param {string} rawName
+ * @returns {(typeof TRIBUTE_PROFILES)[keyof typeof TRIBUTE_PROFILES] | null}
+ */
+function resolveTributeProfile(rawName) {
+  const key = TRIBUTE_ALIASES.get(normalizeTributeKey(rawName));
+  return key ? TRIBUTE_PROFILES[key] : null;
+}
+
 /**
  * @param {string} rawName
  * @returns {boolean}
  */
 export function isSecretTributeName(rawName) {
-  return Boolean(TRIBUTE_PROFILES[normalizeTributeKey(rawName)]);
+  return Boolean(resolveTributeProfile(rawName));
 }
 
 /**
@@ -417,11 +459,13 @@ export function isSecretTributeName(rawName) {
  * @returns {Promise<{ name: string, message: string }>}
  */
 export async function generateSecretTribute(rawName) {
-  const profile = TRIBUTE_PROFILES[normalizeTributeKey(rawName)];
+  const profile = resolveTributeProfile(rawName);
 
   if (!profile) {
     throw new Error('Unknown tribute name');
   }
+
+  const mention = profile.mention ?? profile.name;
 
   const pickFallback = () =>
     profile.fallbacks[Math.floor(Math.random() * profile.fallbacks.length)];
@@ -441,12 +485,14 @@ export async function generateSecretTribute(rawName) {
   }
 
   const prompt =
-    `اكتبي نص غزل واحد فقط، عميق وواقعي ورومانسي، موجه حصرياً لاسم "${profile.name}".\n` +
+    `اكتبي نص غزل واحد فقط، عميق وواقعي ودافئ، موجه حصرياً لـ "${profile.name}".\n` +
+    (profile.context ? `${profile.context}\n` : '') +
     `${styleHint}\n` +
     'المطلوب:\n' +
-    `- مشاعر صادقة كأن شخص يحب ${profile.name} فعلاً (حنين، دفء، شوق، تقدير).\n` +
+    `- مشاعر صادقة كأن شخص يحب ${mention} فعلاً (حنين، دفء، شوق، تقدير).\n` +
     '- ابتعدي عن المبالغة السينمائية الرخيصة والجمل الجاهزة المكررة.\n' +
-    `- لازم يظهر اسم ${profile.name} مرة واحدة على الأقل.\n` +
+    `- لازم يظهر اسم ${mention} مرة واحدة على الأقل.\n` +
+    (profile.extra ? `${profile.extra}\n` : '') +
     '- جملة أو جملتين قصيرتين فقط (حوالي 18 إلى 40 كلمة).\n' +
     '- ممنوع الإيموجي، العناوين، الشرح، علامات الاقتباس، أو أي نص غير الغزل نفسه.\n' +
     `- نوّعي الصورة كل مرة: ${profile.images}...\n` +
@@ -463,7 +509,7 @@ export async function generateSecretTribute(rawName) {
         throw new Error('Invalid tribute line');
       }
 
-      if (!line.includes(profile.name)) {
+      if (!line.includes(mention)) {
         line = `${profile.name}، ${line}`;
       }
 
