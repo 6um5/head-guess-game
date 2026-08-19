@@ -562,7 +562,11 @@ export function useGameSocket() {
   const clearError = useCallback(() => setError(null), []);
 
   const currentUserId = session?.userId ?? null;
-  const isFighter = myRole === "fighterA" || myRole === "fighterB";
+  const isFighter =
+    myRole === "fighterA" ||
+    myRole === "fighterB" ||
+    (!!currentUserId &&
+      (currentUserId === fighterA?.userId || currentUserId === fighterB?.userId));
   const canGuess = roundPhase === "guessing" && isFighter;
 
   return {

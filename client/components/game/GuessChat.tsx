@@ -10,6 +10,8 @@ interface GuessChatProps {
   currentUserId: string | null;
   onSendGuess: (message: string) => void;
   disabled?: boolean;
+  disabledReason?: string | null;
+  duelLabel?: string | null;
 }
 
 export default function GuessChat({
@@ -17,6 +19,8 @@ export default function GuessChat({
   currentUserId,
   onSendGuess,
   disabled = false,
+  disabledReason = null,
+  duelLabel = null,
 }: GuessChatProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -101,7 +105,7 @@ export default function GuessChat({
                 <div className="text-right" dir="rtl">
                   <p className="text-sm font-semibold text-white">الشات / الحزر</p>
                   <p className="text-[11px] text-slate-400">
-                    {disabled ? "المشاهدة فقط حالياً" : "اكتب حزرك هنا"}
+                    {duelLabel ?? (disabled ? "المشاهدة فقط" : "اكتب حزرك هنا")}
                   </p>
                 </div>
               </div>
@@ -150,12 +154,20 @@ export default function GuessChat({
                 onSubmit={handleSubmit}
                 className="shrink-0 border-t border-white/10 bg-slate-950 px-3 py-3 pb-safe"
               >
+                {disabled && disabledReason && (
+                  <p
+                    className="mb-2 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-100"
+                    dir="rtl"
+                  >
+                    {disabledReason}
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
-                    placeholder={disabled ? "انتهت الجولة…" : "اكتب حزرك هنا…"}
+                    placeholder={disabled ? "الكتابة غير متاحة لك الآن" : "اكتب حزرك هنا…"}
                     maxLength={120}
                     disabled={disabled}
                     dir="rtl"

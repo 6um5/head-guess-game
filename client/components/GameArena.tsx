@@ -153,6 +153,25 @@ export default function GameArena({
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const showWinOverlay =
     (gameStatus === "round_end" || gameStatus === "match_end") && !!roundWinner;
+
+  // Trust the ids too, so a stale role never locks a real duelist out.
+  const isDuelist =
+    myRole === "fighterA" ||
+    myRole === "fighterB" ||
+    (!!currentUserId &&
+      (currentUserId === fighterA?.userId || currentUserId === fighterB?.userId));
+  const duelLabel =
+    fighterA && fighterB ? `${fighterA.username} ضد ${fighterB.username}` : null;
+  const chatDisabled = !canGuess && !(isDuelist && roundPhase === "guessing");
+  const chatDisabledReason = !chatDisabled
+    ? null
+    : !isDuelist
+      ? duelLabel
+        ? `أنت جمهور هذه الجولة — المتبارزان ${duelLabel} هما فقط من يحزران.`
+        : "أنت جمهور هذه الجولة — المتبارزان فقط يحزران."
+      : roundPhase !== "guessing"
+        ? "انتهت الجولة — انتظر بداية الجولة القادمة."
+        : "الكتابة غير متاحة الآن.";
   const canReturnToLobby =
     isHost &&
     (gameStatus === "playing" ||
@@ -266,12 +285,13 @@ export default function GameArena({
                     onSetRoundTimer={onSetRoundTimer}
                   />
                 )}
-                {!canGuess && gameStatus === "playing" && (
+                {!isDuelist && gameStatus === "playing" && (
                   <p
                     className="px-3 py-3 text-center text-xs text-slate-400"
                     dir="rtl"
                   >
-                    أنت جمهور — افتح الشات لمشاهدة الحزر
+                    أنت جمهور هذه الجولة — افتح الشات لمتابعة الحزر
+                    {duelLabel ? ` بين ${duelLabel}` : ""}
                   </p>
                 )}
               </div>
@@ -279,7 +299,9 @@ export default function GameArena({
                 messages={messages}
                 currentUserId={currentUserId}
                 onSendGuess={onSendGuess}
-                disabled={gameStatus !== "playing" || !canGuess}
+                disabled={chatDisabled}
+                disabledReason={chatDisabledReason}
+                duelLabel={duelLabel}
               />
             </div>
           )}
