@@ -19,15 +19,15 @@ const THEMES: Record<
     caption: string;
   }
 > = {
-  ايوش: {
-    label: "لإيوش فقط",
+  ميسمالبرونزيه: {
+    label: "لميسم البرونزية فقط",
     panel:
-      "border-rose-300/30 bg-gradient-to-b from-rose-500/20 via-fuchsia-600/15 to-slate-950/90",
-    ring: "bg-rose-400/20",
-    icon: "fill-rose-300 text-rose-200",
-    heart: "fill-rose-400 text-rose-300",
-    spark: "text-amber-200",
-    caption: "text-rose-200/80",
+      "border-amber-300/30 bg-gradient-to-b from-amber-600/25 via-orange-700/15 to-slate-950/90",
+    ring: "bg-amber-500/20",
+    icon: "fill-amber-300 text-amber-100",
+    heart: "fill-amber-500 text-amber-400",
+    spark: "text-yellow-200",
+    caption: "text-amber-200/80",
   },
   طوطه: {
     label: "لطوطه فقط",
@@ -51,8 +51,12 @@ const THEMES: Record<
   },
 };
 
+const DEFAULT_THEME_KEY = "ميسمالبرونزيه";
+
 /** Short nicknames open the same tribute. */
 const KEY_ALIASES: Record<string, string> = {
+  ميسم: "ميسمالبرونزيه",
+  البرونزيه: "ميسمالبرونزيه",
   ميمي: "ميميالبزونه",
   البزونه: "ميميالبزونه",
 };
@@ -71,16 +75,16 @@ function resolveKey(value: string): string | null {
   return THEMES[resolved] ? resolved : null;
 }
 
-export default function EyushSecret() {
+export default function SecretTribute() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [name, setName] = useState<string>("ايوش");
+  const [name, setName] = useState<string>(DEFAULT_THEME_KEY);
   const [typed, setTyped] = useState("");
 
-  const theme = THEMES[resolveKey(name) ?? "ايوش"] ?? THEMES["ايوش"];
+  const theme = THEMES[resolveKey(name) ?? DEFAULT_THEME_KEY];
 
   const particles = useMemo(
     () =>

@@ -36,13 +36,4 @@ export function registerSecretHandlers(_io, socket) {
       socket.emit('secretTributeError', { message: 'تعذر إكمال اللحظة الآن.' });
     }
   });
-
-  socket.on('requestEyushRomance', async ({ key } = {}) => {
-    try {
-      await respondWithTribute(key, 'eyushRomance', 'eyushRomanceError');
-    } catch (error) {
-      console.error('requestEyushRomance failed:', error);
-      socket.emit('eyushRomanceError', { message: 'تعذر إكمال اللحظة الآن.' });
-    }
-  });
 }

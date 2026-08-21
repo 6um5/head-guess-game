@@ -7,7 +7,7 @@ import HelpButton from "@/components/HelpButton";
 import Home from "@/components/Home";
 import HowToPlayModal from "@/components/HowToPlayModal";
 import Lobby from "@/components/Lobby";
-import EyushSecret from "@/components/secret/EyushSecret";
+import SecretTribute from "@/components/secret/SecretTribute";
 import { useGameSocket } from "@/hooks/useGameSocket";
 
 interface GameAppProps {
@@ -79,7 +79,7 @@ export default function GameApp({ initialRoomCode = null }: GameAppProps) {
   return (
     <>
       <HowToPlayModal open={showHelp} onClose={() => setShowHelp(false)} />
-      <EyushSecret />
+      <SecretTribute />
 
       {screen === "game" && roomCode ? (
         <div className="relative">

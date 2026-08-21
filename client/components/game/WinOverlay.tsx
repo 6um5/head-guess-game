@@ -5,16 +5,18 @@ import { PartyPopper, Trophy } from "lucide-react";
 
 interface WinOverlayProps {
   winnerName: string;
-  word: string;
   points: number | null;
+  matchOver?: boolean;
+  reveal?: { label: string; word: string }[];
 }
 
 const confettiPieces = Array.from({ length: 18 }, (_, index) => index);
 
 export default function WinOverlay({
   winnerName,
-  word,
   points,
+  matchOver = false,
+  reveal = [],
 }: WinOverlayProps) {
   return (
     <AnimatePresence>
@@ -75,15 +77,29 @@ export default function WinOverlay({
           </motion.div>
 
           <p className="text-xs font-semibold tracking-[0.3em] text-amber-200/80" dir="rtl">
-            صحيح!
+            {matchOver ? "نهاية المباراة" : "إجابة صحيحة"}
           </p>
           <h2 className="mt-2 bg-gradient-to-l from-amber-100 via-white to-violet-100 bg-clip-text text-2xl font-bold text-transparent sm:text-3xl" dir="rtl">
-            {winnerName} فاز بالجولة
+            {winnerName} {matchOver ? "فاز بالمباراة" : "فاز بالجولة"}
           </h2>
-          <p className="mt-3 text-sm text-slate-300 sm:text-base" dir="rtl">
-            الكلمات:{" "}
-            <span className="font-semibold text-white">{word}</span>
-          </p>
+
+          {reveal.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 gap-2" dir="rtl">
+              {reveal.map((entry) => (
+                <div
+                  key={entry.label}
+                  className="rounded-2xl border border-white/10 bg-slate-950/50 px-3 py-2.5"
+                >
+                  <p className="truncate text-[11px] text-slate-400">
+                    كلمة {entry.label}
+                  </p>
+                  <p className="truncate text-base font-bold text-amber-100 sm:text-lg">
+                    {entry.word}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
           {points !== null && (
             <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-violet-100" dir="rtl">
               <Trophy className="h-4 w-4 text-amber-300" />

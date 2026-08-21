@@ -273,7 +273,6 @@ export default function GameArena({
                     players={players}
                     currentUserId={currentUserId}
                     roundPhase={roundPhase}
-                    pointsToWin={pointsToWin}
                     isGeneratingAI={isGeneratingAI}
                     roundClockEnabled={roundClock.enabled}
                     roundClockDurationSec={roundClock.durationSec}
@@ -312,7 +311,6 @@ export default function GameArena({
                 players={players}
                 currentUserId={currentUserId}
                 roundPhase={roundPhase}
-                pointsToWin={pointsToWin}
                 isGeneratingAI={isGeneratingAI}
                 roundClockEnabled={roundClock.enabled}
                 roundClockDurationSec={roundClock.durationSec}
@@ -414,11 +412,11 @@ export default function GameArena({
           {showWinOverlay && roundWinner && (
             <WinOverlay
               winnerName={roundWinner.username}
-              word={
-                matchWinner
-                  ? `فاز بالمباراة · أ:${wordA ?? "—"} / ب:${wordB ?? "—"}`
-                  : `أ:${wordA ?? "—"} · ب:${wordB ?? "—"}`
-              }
+              matchOver={Boolean(matchWinner)}
+              reveal={[
+                { label: fighterA?.username ?? "اللاعب أ", word: wordA ?? "—" },
+                { label: fighterB?.username ?? "اللاعب ب", word: wordB ?? "—" },
+              ]}
               points={
                 players.find((p) => p.userId === roundWinner.userId)?.points ??
                 null
