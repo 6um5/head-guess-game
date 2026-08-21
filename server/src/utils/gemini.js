@@ -28,7 +28,7 @@ const FALLBACK_WORDS = {
     'تفاح', 'موز', 'برتقال', 'عنب', 'مانجو', 'رمان', 'توت', 'فراولة',
     'بطيخ', 'شمام', 'خوخ', 'مشمش', 'تين', 'كيوي', 'أناناس', 'جوافة',
     'ليمون', 'كرز', 'تمر', 'برقوق', 'يوسفي', 'كمثرى', 'أفوكادو',
-    'جوز الهند', 'بلح', 'صبار', 'ليمون حامض',
+    'جوز الهند', 'بلح', 'صبار', 'دراق', 'زيتون', 'قشطة', 'نارنج',
   ],
   جماد: [
     'كرسي', 'طاولة', 'باب', 'نافذة', 'هاتف', 'قلم', 'كتاب', 'ساعة',
@@ -36,13 +36,16 @@ const FALLBACK_WORDS = {
     'سجادة', 'وسادة', 'ملعقة', 'سكين', 'صحن', 'كوب', 'حقيبة', 'حذاء',
     'نظارة', 'مقص', 'فرشاة', 'مكنسة', 'غسالة', 'مكيف', 'سلم', 'مطرقة',
     'دفتر', 'ممحاة', 'مسطرة', 'محفظة', 'مظلة', 'صابون', 'شمعة', 'بطانية',
+    'مفرش', 'إبريق', 'طنجرة', 'سماعة', 'شاحن', 'كاميرا', 'دراجة', 'مقلاة',
+    'ستارة', 'جرس', 'ميزان', 'قفل', 'علبة', 'منشفة', 'مكتب', 'مزهرية',
   ],
   'أكلات شعبية': [
     'منسف', 'كبسة', 'فلافل', 'حمص', 'مقلوبة', 'دولمة', 'تبولة',
     'شاورما', 'كباب', 'برياني', 'مسكوف', 'تشريب', 'باچة', 'كبة',
     'مندي', 'ملوخية', 'كشري', 'فتة', 'شيش طاووق', 'سمبوسة',
-    'كنافة', 'بقلاوة', 'زلابية', 'قوزي', 'بامية', 'فتوش', 'برياني',
+    'كنافة', 'بقلاوة', 'زلابية', 'قوزي', 'بامية', 'فتوش',
     'شوربة عدس', 'محشي', 'بيتزا', 'برغر', 'مكرونة', 'رز بحليب',
+    'مسخن', 'شكشوكة', 'كفتة', 'صيادية', 'هريسة', 'معمول', 'لقيمات',
   ],
   'أرقام سهلة': [
     '3', '5', '7', '9', '11', '12', '13', '15', '17', '18', '20', '21',
@@ -79,10 +82,129 @@ function toAvoidSet(avoid) {
 }
 
 /**
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + cost);
+    }
+    previous = current;
+  }
+
+  return previous[b.length];
+}
+
+/**
+ * Fixes near-miss spellings such as "أنناس" by snapping to the
+ * canonical form when the word is clearly a known one.
+ *
+ * @param {string} word
+ * @param {string} category
+ * @returns {string}
+ */
+function snapToKnownWord(word, category) {
+  const pool = FALLBACK_WORDS[category];
+  if (!pool) return word;
+
+  const target = normalizeCompare(word).replace(/\s+/g, '');
+  if (target.length < 4) return word;
+
+  for (const candidate of pool) {
+    const normalized = normalizeCompare(candidate).replace(/\s+/g, '');
+    if (normalized === target) return candidate;
+    if (
+      Math.abs(normalized.length - target.length) <= 1 &&
+      editDistance(normalized, target) === 1
+    ) {
+      return candidate;
+    }
+  }
+
+  return word;
+}
+
+/**
  * @returns {string}
  */
 function makeSeed() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * The shared quality bar for every generated secret word.
+ * @param {string} category
+ * @returns {string}
+ */
+function qualityRules(category) {
+  return (
+    'معايير الاختيار:\n' +
+    '- يعرفها أي شخص عادي فوراً بدون تفكير طويل.\n' +
+    '- جميلة وممتعة بالحزر، وفيها شخصية — مو أول كلمة مملة تخطر بالبال.\n' +
+    '- ممنوع: النادر، القديم، التخصصي، والأسماء التي ما يعرفها عامة الناس.\n' +
+    '- تأكد أن الكلمة صحيحة إملائياً وموجودة فعلاً ضمن هذا التصنيف بالذات.\n' +
+    (category === 'فواكه' || category === 'جماد' || category === 'أكلات شعبية'
+      ? '- كلمة مفردة واحدة قصيرة وشائعة.\n'
+      : '- الاسم المتداول المختصر الذي يعرفه الجميع.\n')
+  );
+}
+
+/**
+ * @param {string[]} avoid
+ * @returns {string}
+ */
+function buildAvoidLine(avoid) {
+  const recent = avoid.slice(-MAX_AVOID_IN_PROMPT);
+  return recent.length
+    ? `ممنوع منعاً باتاً تكرار أي كلمة من هذه (استُعملت سابقاً): ${recent.join('، ')}.\n`
+    : '';
+}
+
+/**
+ * One call that picks both secrets at once, so the pair is
+ * deliberately different instead of two unrelated guesses.
+ *
+ * @param {string} category
+ * @param {string[]} avoid
+ * @param {string} seed
+ * @returns {string}
+ */
+function buildPairPrompt(category, avoid, seed) {
+  const avoidLine = buildAvoidLine(avoid);
+
+  if (category === 'أرقام سهلة') {
+    return (
+      'أنت تدير لعبة حزر أرقام بين شخصين. أعطني رقمين مختلفين.\n' +
+      'كل رقم صحيح بين 1 و 1000، مألوف وسهل التخمين.\n' +
+      avoidLine +
+      'الرقمان مختلفان تماماً، ومن نطاقين مختلفين (مثلاً واحد صغير وواحد أكبر).\n' +
+      'اكتب الرقمين فقط مفصولين بعلامة | بدون أي شرح.\n' +
+      'الشكل المطلوب: رقم | رقم\n' +
+      `رمز تنويع: ${seed}`
+    );
+  }
+
+  return (
+    `أنت تدير لعبة حزر عربية عائلية. أعطني كلمتين من التصنيف: ${category}.\n` +
+    'فكّر بعمق قبل الجواب: استعرض بصمت ثمانية خيارات مشهورة مختلفة، ' +
+    'استبعد المكرر والمبتذل والنادر، ثم اختر أفضل اثنتين.\n' +
+    qualityRules(category) +
+    '- الكلمتان مختلفتان تماماً في المعنى والشكل، ومو من نفس العائلة الضيقة.\n' +
+    avoidLine +
+    'اكتب الكلمتين فقط مفصولتين بعلامة | بدون أي شرح أو ترقيم.\n' +
+    'الشكل المطلوب: كلمة | كلمة\n' +
+    `رمز تنويع: ${seed}`
+  );
 }
 
 /**
@@ -92,10 +214,7 @@ function makeSeed() {
  * @returns {string}
  */
 function buildPrompt(category, avoid, seed) {
-  const recent = avoid.slice(-MAX_AVOID_IN_PROMPT);
-  const avoidLine = recent.length
-    ? `ممنوع تماماً استخدام أي من هذه الكلمات المستعملة سابقاً: ${recent.join('، ')}.\n`
-    : '';
+  const avoidLine = buildAvoidLine(avoid);
 
   if (category === 'أرقام سهلة') {
     return (
@@ -109,16 +228,11 @@ function buildPrompt(category, avoid, seed) {
   }
 
   return (
-    `أنت تدير لعبة حزر عائلية ممتعة. اختر كلمة عربية واحدة من التصنيف: ${category}.\n` +
-    'فكّر بذكاء قبل الاختيار: تخيّل خمسة خيارات مشهورة مختلفة، ثم اختر أجملها للّعب.\n' +
-    'المعيار المثالي: كلمة يعرفها الجميع فوراً، جميلة ومحبّبة، ' +
-    'وفيها متعة بسيطة في الحزر — ليست أول كلمة مملة ولا كلمة صعبة.\n' +
-    'ممنوع تماماً: النادر، القديم، التخصصي، والأسماء التي لا يعرفها عامة الناس.\n' +
+    `أنت تدير لعبة حزر عربية عائلية. اختر كلمة واحدة من التصنيف: ${category}.\n` +
+    'فكّر بعمق: استعرض بصمت ستة خيارات مشهورة، ثم اختر أفضلها للّعب.\n' +
+    qualityRules(category) +
     avoidLine +
-    'التنويع من داخل المشهور فقط: انتقل بين أشياء شائعة مختلفة، ' +
-    'ولا تختر كلمة غريبة لمجرد تجنّب التكرار.\n' +
-    'للفواكه والجماد والأكل: كلمة مفردة واحدة قصيرة وشائعة.\n' +
-    'للشخصيات: أشهر الأسماء التي يعرفها عامة الناس، بالاسم المتداول المختصر.\n' +
+    'التنويع من داخل المشهور فقط، ولا تختر كلمة غريبة لمجرد تجنّب التكرار.\n' +
     'اكتب الكلمة فقط بدون علامات ترقيم أو شرح.\n' +
     `رمز تنويع: ${seed}`
   );
@@ -247,6 +361,8 @@ export async function generateWord(category, avoid = []) {
         throw new Error('Gemini returned an empty or invalid word.');
       }
 
+      word = snapToKnownWord(word, selectedCategory);
+
       if (avoidSet.has(normalizeCompare(word))) {
         throw new Error('Gemini repeated a used word.');
       }
@@ -265,23 +381,122 @@ export async function generateWord(category, avoid = []) {
 }
 
 /**
+ * Two secrets are "too close" when one is basically the other,
+ * which would make the round feel repetitive.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function tooSimilar(a, b) {
+  const first = normalizeCompare(a).replace(/\s+/g, '');
+  const second = normalizeCompare(b).replace(/\s+/g, '');
+
+  if (!first || !second) return true;
+  if (first === second) return true;
+  if (first.includes(second) || second.includes(first)) return true;
+
+  return false;
+}
+
+/**
+ * @param {string} word
+ * @param {string} category
+ * @returns {string | null}
+ */
+function validateWord(word, category) {
+  const cleaned = cleanGeneratedWord(word);
+
+  if (category === 'أرقام سهلة') {
+    const digits = cleaned.replace(/[^\d]/g, '');
+    const num = Number(digits);
+    if (!Number.isInteger(num) || num < 1 || num > 1000) return null;
+    return String(num);
+  }
+
+  if (!cleaned || cleaned.length > 64) return null;
+  return snapToKnownWord(cleaned, category);
+}
+
+/**
+ * Asks for both secrets in a single call so the model can
+ * deliberately pick two different, well-known answers.
+ *
+ * @param {string} category
+ * @param {string[]} avoid
+ * @returns {Promise<[string, string] | null>}
+ */
+async function generateWordPair(category, avoid) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const avoidSet = toAvoidSet(avoid);
+  const attempts = [
+    { model: MODEL_CANDIDATES[0], temperature: 1.0 },
+    { model: MODEL_CANDIDATES[0], temperature: 1.2 },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const seed = makeSeed();
+      const prompt = buildPairPrompt(category, avoid, seed);
+      const raw = await runPrompt(genAI, attempt.model, prompt, attempt.temperature);
+      const parts = cleanGeneratedWord(raw, seed)
+        .split(/[|\n،,]/)
+        .map((part) => validateWord(part, category))
+        .filter((part) => Boolean(part));
+
+      if (parts.length < 2) {
+        throw new Error('Pair response did not contain two words');
+      }
+
+      const [first, second] = parts;
+
+      if (avoidSet.has(normalizeCompare(first)) || avoidSet.has(normalizeCompare(second))) {
+        throw new Error('Pair repeated a used word');
+      }
+
+      if (tooSimilar(first, second)) {
+        throw new Error('Pair words are too close to each other');
+      }
+
+      return [first, second];
+    } catch (error) {
+      console.warn(
+        `[Gemini] Pair via ${attempt.model} failed:`,
+        error?.message ?? error,
+      );
+    }
+  }
+
+  return null;
+}
+
+/**
  * @param {string} category
  * @param {string[]} [avoid]
  * @returns {Promise<[string, string]>}
  */
 export async function generateTwoDistinctWords(category, avoid = []) {
+  const pair = await generateWordPair(category, avoid);
+
+  if (pair) {
+    return pair;
+  }
+
   const first = await generateWord(category, avoid);
   let second = await generateWord(category, [...avoid, first]);
 
-  if (normalizeCompare(first) === normalizeCompare(second)) {
+  if (tooSimilar(first, second)) {
     second = getFallbackWord(category, [...avoid, first]);
   }
 
-  if (normalizeCompare(first) === normalizeCompare(second)) {
+  if (tooSimilar(first, second)) {
     second =
       category === 'أرقام سهلة'
-        ? String(Math.min(1000, Number(first) + 1 || 2))
-        : `${first} ٢`;
+        ? String(Math.max(1, Math.min(1000, (Number(first) || 1) + 7)))
+        : getFallbackWord(category === 'فواكه' ? 'جماد' : 'فواكه', avoid);
   }
 
   return [first, second];
